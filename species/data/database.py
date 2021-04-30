@@ -14,6 +14,7 @@ import numpy as np
 import tqdm
 
 from astropy.io import fits
+from scipy import linalg
 from typeguard import typechecked
 
 from species.analysis import photometry
@@ -954,9 +955,15 @@ class Database:
                         read_cov[key] = data
 
                 if read_cov[key] is not None:
+                    sign, log_det_cov = np.linalg.slogdet(read_cov[key])
+
+                    if sign != 1.:
+                        raise ValueError(f'Unexpected sign ({sign}) from np.linalg.slogdet.')
+
                     print(f'      - Database tag: {key}')
                     print(f'      - Filename: {value[1]}')
                     print(f'      - Data shape: {read_cov[key].shape}')
+                    print(f'      - Log-determinant: {log_det_cov:.2f}')
 
             print('   - Spectral resolution:')
 
@@ -969,8 +976,18 @@ class Database:
                     h5_file.create_dataset(f'objects/{object_name}/spectrum/{key}/covariance',
                                            data=read_cov[key])
 
+                    _, log_det_cov = np.linalg.slogdet(read_cov[key])
+
+                    dset = h5_file[f'objects/{object_name}/spectrum/{key}/covariance']
+                    dset.attrs['log_det_cov'] = log_det_cov
+
                     h5_file.create_dataset(f'objects/{object_name}/spectrum/{key}/inv_covariance',
-                                           data=np.linalg.inv(read_cov[key]))
+                                           data=linalg.inv(read_cov[key]))
+
+                    if not np.allclose(read_spec[key][:, 2], np.sqrt(np.diag(read_cov[key]))):
+                        raise ValueError(f'The uncertainties from the spectrum file of {key} are '
+                                         f'different from the uncorrelated uncertainties from the '
+                                         f'covariance file.')
 
                 dset = h5_file[f'objects/{object_name}/spectrum/{key}']
 
@@ -1383,8 +1400,8 @@ class Database:
                          burnin: Optional[int] = None,
                          wavel_range: Optional[Union[Tuple[float, float], str]] = None,
                          spec_res: Optional[float] = None,
-                         wavel_resample: Optional[np.ndarray] = None) -> \
-                             Union[List[box.ModelBox], List[box.SpectrumBox]]:
+                         wavel_resample: Optional[np.ndarray] = None) -> Union[
+                             List[box.ModelBox], List[box.SpectrumBox]]:
         """
         Function for drawing random spectra from the sampled posterior distributions.
 
@@ -1447,7 +1464,7 @@ class Database:
             ignore_param.append(dset.attrs[f'error{i}'])
 
         for i in range(n_param):
-            if dset.attrs[f'parameter{i}'][:9] == 'corr_len_':
+            if dset.attrs[f'parameter{i}'][:13] == 'log_corr_len_':
                 ignore_param.append(dset.attrs[f'parameter{i}'])
 
             elif dset.attrs[f'parameter{i}'][:9] == 'corr_amp_':

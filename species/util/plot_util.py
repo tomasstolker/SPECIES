@@ -210,6 +210,14 @@ def update_labels(param: List[str]) -> List[str]:
         index = param.index('ism_red')
         param[index] = r'$\mathregular{R_V}$'
 
+    if 'powerl_ext' in param:
+        index = param.index('powerl_ext')
+        param[index] = r'$\mathregular{A_V}$'
+
+    if 'powerl_exp' in param:
+        index = param.index('powerl_exp')
+        param[index] = r'$\alpha_\mathregular{ext}$'
+
     if 'tint' in param:
         index = param.index('tint')
         param[index] = r'$\mathregular{T_{int}}$ (K)'
@@ -238,14 +246,20 @@ def update_labels(param: List[str]) -> List[str]:
         elif item[0:6] == 'error_':
             param[i] = rf'$\mathregular{{b}}_\mathregular{{{item[6:]}}}$'
 
-        elif item[0:11] == 'wavelength_':
-            param[i] = rf'$\mathregular{{c}}_\mathregular{{{item[11:]}}}$ (nm)'
+        elif item[0:6] == 'slope_':
+            param[i] = rf'$\mathregular{{c}}_\mathregular{{{item[6:]}}}$'
 
-        elif item[0:9] == 'corr_len_':
+        elif item[0:9] == 'log_corr_len_':
             param[i] = rf'$\mathregular{{log}}\,\ell_\mathregular{{{item[9:]}}}$'
 
         elif item[0:9] == 'corr_amp_':
             param[i] = rf'$\mathregular{{f}}_\mathregular{{{item[9:]}}}$'
+
+        elif item[0:13] == 'log_glob_len_':
+            param[i] = rf'$\mathregular{{log}}\,\rho_\mathregular{{{item[13:]}}}$'
+
+        elif item[0:13] == 'log_glob_amp_':
+            param[i] = rf'$\mathregular{{log}}\,\sigma^2_\mathregular{{{item[13:]}}}$'
 
     for i in range(100):
         if f'teff_{i}' in param:

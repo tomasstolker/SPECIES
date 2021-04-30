@@ -20,6 +20,14 @@ species.util.dust\_util module
    :undoc-members:
    :show-inheritance:
 
+species.util.mcmc\_util module
+------------------------------
+
+.. automodule:: species.util.mcmc_util
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 species.util.phot\_util module
 ------------------------------
 

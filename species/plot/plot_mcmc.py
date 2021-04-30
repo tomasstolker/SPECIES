@@ -735,8 +735,8 @@ def plot_extinction(tag: str,
         ax.get_yaxis().set_label_coords(offset[1], 0.5)
 
     else:
-        ax.get_xaxis().set_label_coords(0.5, -0.22)
-        ax.get_yaxis().set_label_coords(-0.09, 0.5)
+        ax.get_xaxis().set_label_coords(0.5, -0.1)
+        ax.get_yaxis().set_label_coords(-0.08, 0.5)
 
     sample_wavel = np.linspace(wavel_range[0], wavel_range[1], 100)
 
@@ -825,6 +825,16 @@ def plot_extinction(tag: str,
 
         for i in range(samples.shape[0]):
             sample_ext = dust_util.ism_extinction(ism_ext[i], ism_red[i], sample_wavel)
+
+            ax.plot(sample_wavel, sample_ext, ls='-', lw=0.5, color='black', alpha=0.5)
+
+    elif 'powerl_ext' in box.parameters:
+
+        av_index = box.parameters.index('powerl_ext')
+        alpha_index = box.parameters.index('powerl_exp')
+
+        for i in range(samples.shape[0]):
+            sample_ext = dust_util.powerl_extinction(samples[i, av_index], samples[i, alpha_index], sample_wavel)
 
             ax.plot(sample_wavel, sample_ext, ls='-', lw=0.5, color='black', alpha=0.5)
 

@@ -70,7 +70,7 @@ def download_filter(filter_id: str) -> Tuple[Optional[np.ndarray],
 
         os.remove('VisAO_zp_filter_curve.dat')
 
-    elif filter_id  in ['LCO/VisAO.Ys', 'Magellan/VisAO.Ys']:
+    elif filter_id in ['LCO/VisAO.Ys', 'Magellan/VisAO.Ys']:
         url = 'https://xwcl.science/magao/visao/VisAO_Ys_filter_curve.dat'
         urllib.request.urlretrieve(url, 'VisAO_Ys_filter_curve.dat')
 

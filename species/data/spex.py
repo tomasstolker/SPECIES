@@ -234,10 +234,10 @@ def add_spex(input_path: str,
             dset = database.create_dataset(f'spectra/spex/{name}', data=spdata)
 
             dset.attrs['name'] = str(name).encode()
-            
+
             if sptype_opt is not None:
                 dset.attrs['sptype'] = str(sptype_opt).encode()
-            elif sptype_nir is not None:    
+            elif sptype_nir is not None:
                 dset.attrs['sptype'] = str(sptype_nir).encode()
             else:
                 dset.attrs['sptype'] = str('None').encode()

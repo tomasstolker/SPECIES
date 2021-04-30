@@ -182,7 +182,7 @@ class CompareSpectra:
                         flux_scaling = 10.**(-0.4*ism_ext)
 
                         # Shift wavelengths by RV
-                        wavel_shifted = spectrum[:, 0] + spectrum[:, 0] * 1e3*rv_item / constants.LIGHT
+                        wavel_shifted = spectrum[:, 0] + spectrum[:, 0]*1e3*rv_item/constants.LIGHT
 
                         # Smooth spectrum
                         flux_smooth = read_util.smooth_spectrum(wavel_shifted,

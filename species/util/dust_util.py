@@ -559,3 +559,31 @@ def ism_extinction(av_mag: float,
             0.62251*y_wavel[indices]**5 + 5.30260*y_wavel[indices]**6 - 2.09002*y_wavel[indices]**7
 
     return av_mag * (a_coeff + b_coeff/rv_red)
+
+
+@typechecked
+def powerl_extinction(av_mag: float,
+                      alpha: float,
+                      wavelengths: np.ndarray) -> np.ndarray:
+    """
+    Function for calculating a power-law extinction law.
+
+    Parameters
+    ----------
+    av_mag : float
+        Extinction (mag) in the V band.
+    alpha : float
+        Power-law index.
+    wavelengths : np.ndarray
+        Array with the wavelengths (um) for which the extinction will be calculated.
+
+    Returns
+    -------
+    np.ndarray
+        Extinction (mag) at ``wavelengths``.
+    """
+
+    # Mean wavelength of Generic/Bessell.V
+    v_wavel = 0.551  # (um)
+
+    return av_mag * (wavelengths/v_wavel)**alpha

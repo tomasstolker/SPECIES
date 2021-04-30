@@ -142,12 +142,18 @@ def update_spectra(objectbox: box.ObjectBox,
             spec_tmp = value[0]
 
             if f'scaling_{key}' in model_param:
-                # Scale the flux of the spectrum
+                # Constant scaling for the spectrum flux
                 scaling = model_param[f'scaling_{key}']
+                print(f'Scaling the flux of {key}: {scaling:.2f}... [DONE]')
 
-                print(f'Scaling the flux of {key}: {scaling:.2f}...', end='', flush=True)
-                spec_tmp[:, 1] *= model_param[f'scaling_{key}']
-                print(' [DONE]')
+                if f'slope_{key}' in model_param:
+                    # Linear scaling with wavelength of the spectrum flux
+                    slope = model_param[f'slope_{key}']
+
+                    print(f'Scaling the flux of {key} with a slope: {slope:.2f}... [DONE]')
+                    scaling += slope*spec_tmp[:, 0]
+
+                spec_tmp[:, 1] *= scaling
 
             if f'error_{key}' in model_param:
                 if model is None:

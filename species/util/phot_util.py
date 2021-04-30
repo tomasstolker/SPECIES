@@ -240,15 +240,14 @@ def get_residuals(datatype: str,
                 wavel_range = (0.9*objectbox.spectrum[key][0][0, 0],
                                1.1*objectbox.spectrum[key][0][-1, 0])
 
-                wl_new = objectbox.spectrum[key][0][:, 0]
-                spec_res = objectbox.spectrum[key][3]
+                wavel_resample = objectbox.spectrum[key][0][:, 0]
 
                 if spectrum == 'planck':
                     readmodel = read_planck.ReadPlanck(wavel_range=wavel_range)
 
                     model = readmodel.get_spectrum(model_param=parameters, spec_res=1000.)
 
-                    flux_new = spectres.spectres(wl_new,
+                    flux_new = spectres.spectres(wavel_resample,
                                                  model.wavelength,
                                                  model.flux,
                                                  spec_errs=None,
@@ -261,8 +260,8 @@ def get_residuals(datatype: str,
                     # resampling to the new wavelength points is done in teh get_model function
 
                     model_spec = readmodel.get_model(parameters,
-                                                     spec_res=spec_res,
-                                                     wavel_resample=wl_new,
+                                                     spec_res=objectbox.spectrum[key][3],
+                                                     wavel_resample=wavel_resample,
                                                      smooth=True)
 
                     flux_new = model_spec.flux
@@ -270,7 +269,7 @@ def get_residuals(datatype: str,
                 data_spec = objectbox.spectrum[key][0]
                 res_tmp = (data_spec[:, 1]-flux_new) / data_spec[:, 2]
 
-                res_spec[key] = np.column_stack([wl_new, res_tmp])
+                res_spec[key] = np.column_stack([wavel_resample, res_tmp])
 
     else:
         res_spec = None

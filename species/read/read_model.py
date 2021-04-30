@@ -20,7 +20,7 @@ from species.analysis import photometry
 from species.core import box, constants
 from species.data import database
 from species.read import read_calibration, read_filter, read_planck
-from species.util import read_util, dust_util
+from species.util import dust_util, mcmc_util, read_util
 
 
 class ReadModel:
@@ -328,11 +328,11 @@ class ReadModel:
 
     @staticmethod
     @typechecked
-    def apply_lognorm_ext(wavelength: np.ndarray,
-                          flux: np.ndarray,
-                          radius_interp: float,
-                          sigma_interp: float,
-                          v_band_ext: float) -> np.ndarray:
+    def apply_ext_lnorm_distr(wavelength: np.ndarray,
+                              flux: np.ndarray,
+                              radius_interp: float,
+                              sigma_interp: float,
+                              v_band_ext: float) -> np.ndarray:
         """
         Internal function for applying extinction by dust to a spectrum.
 
@@ -416,11 +416,11 @@ class ReadModel:
 
     @staticmethod
     @typechecked
-    def apply_powerlaw_ext(wavelength: np.ndarray,
-                           flux: np.ndarray,
-                           r_max_interp: float,
-                           exp_interp: float,
-                           v_band_ext: float) -> np.ndarray:
+    def apply_ext_plaw_distr(wavelength: np.ndarray,
+                             flux: np.ndarray,
+                             r_max_interp: float,
+                             exp_interp: float,
+                             v_band_ext: float) -> np.ndarray:
         """
         Internal function for applying extinction by dust to a spectrum.
 
@@ -504,7 +504,7 @@ class ReadModel:
 
     @staticmethod
     @typechecked
-    def apply_ism_ext(wavelengths: np.ndarray,
+    def apply_ext_ism(wavelengths: np.ndarray,
                       flux: np.ndarray,
                       v_band_ext: float,
                       v_band_red: float) -> np.ndarray:
@@ -527,6 +527,34 @@ class ReadModel:
         """
 
         ext_mag = dust_util.ism_extinction(v_band_ext, v_band_red, wavelengths)
+
+        return flux * 10.**(-0.4*ext_mag)
+
+    @staticmethod
+    @typechecked
+    def apply_ext_powerlaw(wavelengths: np.ndarray,
+                           flux: np.ndarray,
+                           v_band_ext: float,
+                           powerl_index: float) -> np.ndarray:
+        """
+        Internal function for applying ISM extinction to a spectrum.
+
+        wavelengths : np.ndarray
+            Wavelengths (um) of the spectrum.
+        flux : np.ndarray
+            Fluxes (W m-2 um-1) of the spectrum.
+        v_band_ext : float
+            Extinction (mag) in the V band.
+        powerl_index : float
+            Power-law index
+
+        Returns
+        -------
+        np.ndarray
+            Fluxes (W m-2 um-1) with the extinction applied.
+        """
+
+        ext_mag = dust_util.powerl_extinction(v_band_ext, powerl_index, wavelengths)
 
         return flux * 10.**(-0.4*ext_mag)
 
@@ -578,7 +606,7 @@ class ReadModel:
         extra_param = ['radius', 'distance', 'mass', 'luminosity', 'lognorm_radius',
                        'lognorm_sigma', 'lognorm_ext', 'ism_ext', 'ism_red', 'powerlaw_max',
                        'powerlaw_exp', 'powerlaw_ext', 'disk_teff', 'disk_radius',
-                       'veil_a', 'veil_b', 'veil_ref']
+                       'veil_a', 'veil_b', 'veil_ref', 'powerl_ext', 'powerl_exp']
 
         for key in self.get_parameters():
             if key not in model_param.keys():
@@ -760,9 +788,9 @@ class ReadModel:
                                    quantity=quantity)
 
         if 'veil_a' in model_param and 'veil_b' in model_param and 'veil_ref' in model_param:
-            lambda_ref = 0.5 # (um)
+            lambda_ref = 0.5  # (um)
 
-            veil_flux =  model_param['veil_ref'] + \
+            veil_flux = model_param['veil_ref'] + \
                 model_param['veil_b']*(model_box.wavelength - lambda_ref)
 
             model_box.flux = model_param['veil_a']*model_box.flux + veil_flux
@@ -770,20 +798,20 @@ class ReadModel:
         if 'lognorm_radius' in model_param and 'lognorm_sigma' in model_param and \
                 'lognorm_ext' in model_param:
 
-            model_box.flux = self.apply_lognorm_ext(model_box.wavelength,
-                                                    model_box.flux,
-                                                    model_param['lognorm_radius'],
-                                                    model_param['lognorm_sigma'],
-                                                    model_param['lognorm_ext'])
+            model_box.flux = self.apply_ext_lnorm_distr(model_box.wavelength,
+                                                        model_box.flux,
+                                                        model_param['lognorm_radius'],
+                                                        model_param['lognorm_sigma'],
+                                                        model_param['lognorm_ext'])
 
         if 'powerlaw_max' in model_param and 'powerlaw_exp' in model_param and \
                 'powerlaw_ext' in model_param:
 
-            model_box.flux = self.apply_powerlaw_ext(model_box.wavelength,
-                                                     model_box.flux,
-                                                     model_param['powerlaw_max'],
-                                                     model_param['powerlaw_exp'],
-                                                     model_param['powerlaw_ext'])
+            model_box.flux = self.apply_ext_plaw_distr(model_box.wavelength,
+                                                       model_box.flux,
+                                                       model_param['powerlaw_max'],
+                                                       model_param['powerlaw_exp'],
+                                                       model_param['powerlaw_ext'])
 
         if 'ism_ext' in model_param:
 
@@ -792,10 +820,17 @@ class ReadModel:
             else:
                 ism_reddening = 3.1
 
-            model_box.flux = self.apply_ism_ext(model_box.wavelength,
+            model_box.flux = self.apply_ext_ism(model_box.wavelength,
                                                 model_box.flux,
                                                 model_param['ism_ext'],
                                                 ism_reddening)
+
+        if 'powerl_ext' in model_param and 'powerl_exp' in model_param:
+
+            model_box.flux = self.apply_ext_powerlaw(model_box.wavelength,
+                                                     model_box.flux,
+                                                     model_param['powerl_ext'],
+                                                     model_param['powerl_exp'])
 
         if 'radius' in model_box.parameters:
             model_box.parameters['luminosity'] = 4. * np.pi * (
@@ -904,20 +939,20 @@ class ReadModel:
         if 'lognorm_radius' in model_param and 'lognorm_sigma' in model_param and \
                 'lognorm_ext' in model_param:
 
-            model_box.flux = self.apply_lognorm_ext(model_box.wavelength,
-                                                    model_box.flux,
-                                                    model_param['lognorm_radius'],
-                                                    model_param['lognorm_sigma'],
-                                                    model_param['lognorm_ext'])
+            model_box.flux = self.apply_ext_lnorm_distr(model_box.wavelength,
+                                                        model_box.flux,
+                                                        model_param['lognorm_radius'],
+                                                        model_param['lognorm_sigma'],
+                                                        model_param['lognorm_ext'])
 
         if 'powerlaw_max' in model_param and 'powerlaw_exp' in model_param and \
                 'powerlaw_ext' in model_param:
 
-            model_box.flux = self.apply_powerlaw_ext(model_box.wavelength,
-                                                     model_box.flux,
-                                                     model_param['powerlaw_max'],
-                                                     model_param['powerlaw_exp'],
-                                                     model_param['powerlaw_ext'])
+            model_box.flux = self.apply_ext_plaw_distr(model_box.wavelength,
+                                                       model_box.flux,
+                                                       model_param['powerlaw_max'],
+                                                       model_param['powerlaw_exp'],
+                                                       model_param['powerlaw_ext'])
 
         if 'ism_ext' in model_param:
 
@@ -926,10 +961,17 @@ class ReadModel:
             else:
                 ism_reddening = 3.1
 
-            model_box.flux = self.apply_ism_ext(model_box.wavelength,
+            model_box.flux = self.apply_ext_ism(model_box.wavelength,
                                                 model_box.flux,
                                                 model_param['ism_ext'],
                                                 ism_reddening)
+
+        if 'powerl_ext' in model_param and 'powerl_exp' in model_param:
+
+            model_box.flux = self.apply_ext_powerlaw(model_box.wavelength,
+                                                     model_box.flux,
+                                                     model_param['powerl_ext'],
+                                                     model_param['powerl_exp'])
 
         if 'radius' in model_box.parameters:
             model_box.parameters['luminosity'] = 4. * np.pi * (
@@ -946,7 +988,7 @@ class ReadModel:
     @typechecked
     def get_flux(self,
                  model_param: Dict[str, float],
-                 synphot=None):
+                 synphot=None) -> Tuple[float, None]:
         """
         Function for calculating the average flux density for the ``filter_name``.
 
@@ -955,7 +997,7 @@ class ReadModel:
         model_param : dict
             Model parameters and values.
         synphot : species.analysis.photometry.SyntheticPhotometry, None
-            Synthetic photometry object. The object is created if set to None.
+            Synthetic photometry object. The object is created if set to ``None``.
 
         Returns
         -------
@@ -1033,6 +1075,115 @@ class ReadModel:
                     spectrum.wavelength, spectrum.flux, distance=None)
 
         return app_mag[0], abs_mag[0]
+
+    @typechecked
+    def log_likelihood(self,
+                       model_param: Dict[str, float],
+                       object_box: box.ObjectBox) -> Tuple[float, Dict[str, float]]:
+        """
+        Function for calculating the log-likelihood for a given set of parameters and selected
+        data of an ``ObjectBox``. The ``weight`` parameter is currently not implemented (see
+        ``weights`` parameter of ``FitModel``). Please open an issue on Github if this parameter
+        is required.
+
+        Parameters
+        ----------
+        model_param : dict
+            Dictionary with the model parameters and values.
+        object_box : species.core.box.ObjectBox
+            The :class:`~species.core.box.ObjectBox` with the photometric fluxes and/or spectra
+            for which the log-likelihood will be calculated. Any scaling parameters in
+            ``model_param`` will be applied so the :func:`~species.util.read_util.update_spectra`
+            should not have been used on the ``object_box`` (i.e. the original spectra are
+            required).
+
+        Returns
+        -------
+        float
+            Total (natural) log-likelihood.
+        dict
+            Dictionary with the log-likelihood for the individual components.
+        """
+
+        if self.spectrum_interp is None:
+            self.interpolate_model()
+
+        spectrum = self.get_model(model_param)
+
+        print('\rCalculating the log-likelihood:')
+
+        lnlike_dict = {}
+
+        if object_box.flux is not None:
+            for filter_name, phot_flux in object_box.flux.items():
+                synphot = photometry.SyntheticPhotometry(filter_name)
+
+                model_flux, _ = synphot.spectrum_to_flux(spectrum.wavelength, spectrum.flux)
+
+                lnlike_dict[filter_name] = mcmc_util.lnlike_phot(
+                    phot_flux[0], phot_flux[1]**2, model_flux, weight=None)
+
+                print(f'   - {filter_name} = {lnlike_dict[filter_name]:.2f}')
+
+        if object_box.spectrum is not None:
+            for spec_name, spec_data in object_box.spectrum.items():
+                if f'scaling_{spec_name}' in model_param:
+                    # Write to spec_flux such that the ObjectBox fluxes are not overwritten
+                    spec_flux = model_param[f'scaling_{spec_name}'] * spec_data[0][:, 1]
+
+                else:
+                    spec_flux = spec_data[0][:, 1]
+
+                if spec_data[1] is not None:
+                    cov_matrix = spec_data[1]
+
+                elif f'log_corr_len_{spec_name}' in model_param and \
+                        f'corr_amp_{spec_name}' in model_param:
+
+                    cov_matrix = mcmc_util.sqexp_kernel(spec_data[0][:, 0],
+                                                        spec_data[0][:, 2],
+                                                        model_param[f'corr_amp_{spec_name}'],
+                                                        model_param[f'log_corr_len_{spec_name}'])
+
+                elif f'log_glob_len_{spec_name}' in model_param and \
+                        f'log_glob_amp_{spec_name}' in model_param:
+
+                    log_glob_amp = model_param[f'log_glob_amp_{spec_name}']
+                    log_glob_len = model_param[f'log_glob_len_{spec_name}']
+
+                    cov_matrix = mcmc_util.matern32_kernel(spec_data[0][:, 0],
+                                                           spec_data[0][:, 2]**2,
+                                                           log_glob_amp,
+                                                           log_glob_len)
+
+                else:
+                    cov_matrix = None
+
+                if spec_data[2] is not None:
+                    inv_cov_matrix = spec_data[2]
+
+                else:
+                    inv_cov_matrix = None
+
+                model_box = self.get_model(model_param,
+                                           spec_res=spec_data[3],
+                                           wavel_resample=spec_data[0][:, 0],
+                                           smooth=True)
+
+                lnlike_dict[spec_name] = mcmc_util.lnlike_spec(
+                    spec_flux, spec_data[0][:, 2]**2, model_box.flux, weight=None,
+                    cov_matrix=cov_matrix, inv_cov_matrix=inv_cov_matrix)
+
+                print(f'   - {spec_name} = {lnlike_dict[spec_name]:.2f}')
+
+        if len(lnlike_dict) == 0:
+            raise ValueError('The dictionary with log-likelihood values is empty. Please '
+                             'make sure that the object_box contains photometric and/or '
+                             'spectral data.')
+
+        print(f'Total log-likelihood: {sum(lnlike_dict.values()):.2f}')
+
+        return sum(lnlike_dict.values()), lnlike_dict
 
     @typechecked
     def get_bounds(self) -> Dict[str, Tuple[float, float]]:
