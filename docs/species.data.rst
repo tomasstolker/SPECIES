@@ -156,6 +156,14 @@ species.data.leggett module
    :undoc-members:
    :show-inheritance:
 
+species.data.morley2012 module
+------------------------------
+
+.. automodule:: species.data.morley2012
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 species.data.petitcode module
 -----------------------------
 

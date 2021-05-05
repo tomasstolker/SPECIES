@@ -1,9 +1,10 @@
 """
-Module with functionalities for empirical spectral analysis.
+Module with functionalities for comparing a spectrum with a library of empirical or model spectra.
 """
 
 import configparser
 import os
+import warnings
 
 from typing import List, Optional, Tuple, Union
 
@@ -15,20 +16,20 @@ from typeguard import typechecked
 
 from species.core import constants
 from species.data import database
-from species.read import read_object
+from species.read import read_model, read_object
 from species.util import dust_util, read_util
 
 
 class CompareSpectra:
     """
-    Class for comparing a spectrum of an object with the spectra of a library.
+    Class for comparing a spectrum of an object with a library of empirical or model spectra.
     """
 
     @typechecked
     def __init__(self,
                  object_name: str,
-                 spec_name: str,
-                 spec_library: str) -> None:
+                 spec_name: Union[str, List[str]],
+                 spec_library: Optional[str] = None) -> None:
         """
         Parameters
         ----------
@@ -36,10 +37,11 @@ class CompareSpectra:
             Object name as stored in the database with
             :func:`~species.data.database.Database.add_object` or
             :func:`~species.data.database.Database.add_companion`.
-        spec_name : str
-            Name of the spectrum that is stored at the object data of ``object_name``.
-        spec_library : str
-            Name of the spectral library ('irtf', 'spex', or 'kesseli+2017).
+        spec_name : str, list(str)
+            Name of the spectrum  that is stored at the object data of ``object_name``. The
+            argument can be either a string or a list of strings.
+        spec_library : str, None
+            DEPRECATED: Name of the spectral library ('irtf', 'spex', or 'kesseli+2017).
 
         Returns
         -------
@@ -49,7 +51,14 @@ class CompareSpectra:
 
         self.object_name = object_name
         self.spec_name = spec_name
-        self.spec_library = spec_library
+
+        if isinstance(self.spec_name, str):
+            self.spec_name = [self.spec_name]
+
+        if spec_library is not None:
+            warnings.warn('The \'spec_library\' parameter is no longer used by the constructor '
+                          'of CompareSpectra and will be removed in a future release.',
+                          DeprecationWarning)
 
         self.object = read_object.ReadObject(object_name)
 
@@ -63,13 +72,14 @@ class CompareSpectra:
     @typechecked
     def spectral_type(self,
                       tag: str,
+                      spec_library,
                       wavel_range: Optional[Tuple[Optional[float], Optional[float]]] = None,
                       sptypes: Optional[List[str]] = None,
                       av_ext: Optional[Union[List[float], np.array]] = None,
                       rad_vel: Optional[Union[List[float], np.array]] = None) -> None:
         """
         Method for finding the best fitting empirical spectra from a selected library by
-        calculating for each spectrum the goodness-of-fit statistic from Cushing et al. (2008).
+        evaluating the goodness-of-fit statistic from Cushing et al. (2008).
 
         Parameters
         ----------
@@ -77,6 +87,8 @@ class CompareSpectra:
             Database tag where for each spectrum from the spectral library the best-fit parameters
             will be stored. So when testing a range of values for ``av_ext`` and ``rad_vel``, only
             the parameters that minimize the goodness-of-fit statistic will be stored.
+        spec_library : str
+            Name of the spectral library ('irtf', 'spex', or 'kesseli+2017).
         wavel_range : tuple(float, float), None
             Wavelength range (um) that is used for the empirical comparison.
         sptypes : list(str), None
@@ -106,19 +118,23 @@ class CompareSpectra:
         h5_file = h5py.File(self.database, 'r')
 
         try:
-            h5_file[f'spectra/{self.spec_library}']
+            h5_file[f'spectra/{spec_library}']
 
         except KeyError:
             h5_file.close()
             species_db = database.Database()
-            species_db.add_spectrum(self.spec_library)
+            species_db.add_spectrum(spec_library)
             h5_file = h5py.File(self.database, 'r')
+
+        if len(self.spec_name) > 1:
+            raise ValueError('The \'spectral_type\' method supports only a single spectrum name. '
+                             'Please set the argument of \'spec_name\' to a string.')
 
         # Read object spectrum
         obj_spec = self.object.get_spectrum()[self.spec_name][0]
 
         # Read inverted covariance matrix
-        obj_inv_cov = self.object.get_spectrum()[self.spec_name][2]
+        # obj_inv_cov = self.object.get_spectrum()[self.spec_name][2]
 
         # Read spectral resolution
         obj_res = self.object.get_spectrum()[self.spec_name][3]
@@ -132,9 +148,9 @@ class CompareSpectra:
 
         print_message = ''
 
-        for i, item in enumerate(h5_file[f'spectra/{self.spec_library}']):
+        for i, item in enumerate(h5_file[f'spectra/{spec_library}']):
             # Read spectrum spectral type from library
-            dset = h5_file[f'spectra/{self.spec_library}/{item}']
+            dset = h5_file[f'spectra/{spec_library}/{item}']
 
             if isinstance(dset.attrs['sptype'], str):
                 item_sptype = dset.attrs['sptype']
@@ -284,4 +300,143 @@ class CompareSpectra:
                                  rad_vel=rv_select,
                                  object_name=self.object_name,
                                  spec_name=self.spec_name,
-                                 spec_library=self.spec_library)
+                                 spec_library=spec_library)
+
+    @typechecked
+    def compare_model(self,
+                      tag: str,
+                      model: str,
+                      av_points: Optional[Union[List[float], np.array]] = None) -> None:
+        """
+        Method for finding the best fitting spectrum from a grid of atmospheric model spectra by
+        evaluating the goodness-of-fit statistic from Cushing et al. (2008). Currently, this method
+        only supports model grids with only :math:`T_\mathrm{eff}` and :math:`\log(g)` as free
+        parameters (e.g. BT-Settl). Please create an issue on Github if support for models with
+        more than two parameters is required.
+
+        Parameters
+        ----------
+        tag : str
+            Database tag where for each spectrum from the spectral library the best-fit parameters
+            will be stored. So when testing a range of values for ``av_ext`` and ``rad_vel``, only
+            the parameters that minimize the goodness-of-fit statistic will be stored.
+        model : str
+            Name of the atmospheric model grid with synthetic spectra.
+        av_points : list(float), np.array, None
+            List of :math:`A_V` extinction values for which the goodness-of-fit statistic will be
+            tested. The extinction is calculated with the relation from Cardelli et al. (1989).
+
+        Returns
+        -------
+        NoneType
+            None
+        """
+
+        w_i = 1.
+
+        if av_points is None:
+            av_points = np.array([0.])
+
+        elif isinstance(av_points, list):
+            av_points = np.array(av_points)
+
+        readmodel = read_model.ReadModel(model)
+
+        model_param = readmodel.get_parameters()
+        grid_points = readmodel.get_points()
+
+        coord_points = []
+        for item in grid_points.values():
+            coord_points.append(item)
+
+        if av_points is not None:
+            model_param.append('ism_ext')
+            coord_points.append(av_points)
+
+        grid_shape = []
+        for item in coord_points:
+            grid_shape.append(len(item))
+
+        grid_shape.append(len(self.spec_name))
+
+        fit_stat = np.zeros(grid_shape)
+        flux_scaling = np.zeros(grid_shape)
+
+        count = 1
+
+        if len(coord_points) == 2:
+            n_iter = len(coord_points[0])*len(coord_points[1])
+
+            for i, item_i in enumerate(coord_points[0]):
+                for j, item_j in enumerate(coord_points[1]):
+                    for k, spec_item in enumerate(self.spec_name):
+                        print(f'Processing model spectrum {count}/{n_iter}...', end='')
+
+                        obj_spec = self.object.get_spectrum()[spec_item][0]
+                        obj_res = self.object.get_spectrum()[spec_item][3]
+
+                        param_dict = {model_param[0]: item_i,
+                                      model_param[1]: item_j}
+
+                        wavel_range = (0.9*obj_spec[0, 0], 1.1*obj_spec[-1, 0])
+                        readmodel = read_model.ReadModel(model, wavel_range=wavel_range)
+
+                        model_box = readmodel.get_data(param_dict,
+                                                       spec_res=obj_res,
+                                                       wavel_resample=obj_spec[:, 0])
+
+                        c_numer = w_i * obj_spec[:, 1] * model_box.flux / obj_spec[:, 2]**2
+                        c_denom = w_i * model_box.flux**2 / obj_spec[:, 2]**2
+
+                        flux_scaling[i, j, k] = np.sum(c_numer) / np.sum(c_denom)
+
+                        residual = obj_spec[:, 1] - flux_scaling[i, j, k]*model_box.flux
+                        fit_stat[i, j, k] = np.sum(w_i * (residual/obj_spec[:, 2])**2)
+
+                    count += 1
+
+        if len(coord_points) == 3:
+            n_iter = len(coord_points[0])*len(coord_points[1])*len(coord_points[2])
+
+            for i, item_i in enumerate(coord_points[0]):
+                for j, item_j in enumerate(coord_points[1]):
+                    for k, item_k in enumerate(coord_points[2]):
+                        for m, spec_item in enumerate(self.spec_name):
+                            print(f'\rProcessing model spectrum {count}/{n_iter}...', end='')
+
+                            obj_spec = self.object.get_spectrum()[spec_item][0]
+                            obj_res = self.object.get_spectrum()[spec_item][3]
+
+                            param_dict = {model_param[0]: item_i,
+                                          model_param[1]: item_j,
+                                          model_param[2]: item_k}
+
+                            wavel_range = (0.9*obj_spec[0, 0], 1.1*obj_spec[-1, 0])
+                            readmodel = read_model.ReadModel(model, wavel_range=wavel_range)
+
+                            model_box = readmodel.get_data(param_dict,
+                                                           spec_res=obj_res,
+                                                           wavel_resample=obj_spec[:, 0])
+
+                            c_numer = w_i * obj_spec[:, 1] * model_box.flux / obj_spec[:, 2]**2
+                            c_denom = w_i * model_box.flux**2 / obj_spec[:, 2]**2
+
+                            flux_scaling[i, j, k, m] = np.sum(c_numer) / np.sum(c_denom)
+
+                            residual = obj_spec[:, 1] - flux_scaling[i, j, k, m]*model_box.flux
+                            fit_stat[i, j, k, m] = np.sum(w_i * (residual/obj_spec[:, 2])**2)
+
+                        count += 1
+
+        print(' [DONE]')
+
+        species_db = database.Database()
+
+        species_db.add_comparison(tag=tag,
+                                  goodness_of_fit=fit_stat,
+                                  flux_scaling=flux_scaling,
+                                  model_param=model_param,
+                                  coord_points=coord_points,
+                                  object_name=self.object_name,
+                                  spec_name=self.spec_name,
+                                  model=model)

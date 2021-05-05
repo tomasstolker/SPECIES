@@ -27,6 +27,7 @@ The following data and models are currently supported:
 - `DRIFT-PHOENIX <http://svo2.cab.inta-csic.es/theory/newov2/index.php?models=drift>`_
 - `Exo-REM <https://ui.adsabs.harvard.edu/abs/2018ApJ...854..172C/abstract>`_
 - `petitCODE <http://www.mpia.de/~molliere/#petitcode>`_
+- `T/Y dwarf spectra from Morley et al. (2012) <http://svo2.cab.inta-csic.es/svo/theory/newov2/index.php?models=morley12>`_
 
 **Spectral libraries**
 
@@ -51,7 +52,7 @@ The following data and models are currently supported:
 
 **Dust extinction**
 
-- ISM empirical relation from `Cardelli et al. (1989) <https://ui.adsabs.harvard.edu/abs/1989ApJ...345..245C/abstract>`_
+- ISM relation from `Cardelli et al. (1989) <https://ui.adsabs.harvard.edu/abs/1989ApJ...345..245C/abstract>`_
 - Extinction cross sections computed with `PyMieScatt <https://pymiescatt.readthedocs.io>`_
 - Optical constants compiled by `Mollière et al. (2019) <https://ui.adsabs.harvard.edu/abs/2019A%26A...627A..67M/abstract>`_
 
@@ -66,10 +67,11 @@ After adding the relevant data to the database, the user can take advantage of t
 - Calculating synthetic photometry spectra (see :class:`~species.analysis.photometry.SyntheticPhotometry`).
 - Interpolating and plotting model spectra (see :class:`~species.read.read_model.ReadModel` and :func:`~species.plot.plot_spectrum.plot_spectrum`).
 - Grid retrievals with Bayesian inference (see :class:`~species.analysis.fit_model.FitModel` and :class:`~species.plot.plot_mcmc`).
+- Comparing a spectrum with a full grid of model spectra (see :meth:`~species.analysis.compare_spectra.CompareSpectra.compare_model`).
 - Free retrievals through a frontend for `petitRADTRANS <https://petitradtrans.readthedocs.io>`_  (see `AtmosphericRetrieval <https://github.com/tomasstolker/species/blob/retrieval/species/analysis/retrieval.py>`_ on the `retrieval branch <https://github.com/tomasstolker/species/tree/retrieval>`_).
 - Creating color-magnitude diagrams (see :class:`~species.read.read_color.ReadColorMagnitude` and :class:`~species.plot.plot_color.plot_color_magnitude`).
 - Creating color-color diagrams (see :class:`~species.read.read_color.ReadColorColor` and :class:`~species.plot.plot_color.plot_color_color`).
 - Computing synthetic fluxes from isochrones and model spectra (see :class:`~species.read.read_isochrone.ReadIsochrone`)
 - Flux calibration of photometric and spectroscopic data (see :class:`~species.read.read_calibration.ReadCalibration`, :class:`~species.analysis.fit_model.FitModel`, and :class:`~species.analysis.fit_spectrum.FitSpectrum`).
-- Empirical comparison of spectra to infer the spectral type (see :class:`~species.analysis.empirical.CompareSpectra`).
+- Empirical comparison of spectra to infer the spectral type (see :meth:`~species.analysis.compare_spectra.CompareSpectra.spectral_type`).
 - Analyzing emission lines from accreting planets (see :class:`~species.analysis.emission_line.EmissionLine`).

@@ -18,12 +18,12 @@ from scipy import linalg
 from typeguard import typechecked
 
 from species.analysis import photometry
-from species.core import box
+from species.core import box, constants
 from species.data import ames_cond, ames_dusty, atmo, blackbody, btcond, btcond_feh, btnextgen, \
                          btsettl, btsettl_cifist, companions, drift_phoenix, dust, exo_rem, \
                          filters, irtf, isochrones, leggett, petitcode, spex, vega, vlm_plx, \
-                         kesseli2017
-from species.read import read_calibration, read_filter, read_model, read_planck
+                         kesseli2017, morley2012
+from species.read import read_calibration, read_filter, read_model, read_object, read_planck
 from species.util import data_util, dust_util, read_util
 
 
@@ -326,27 +326,31 @@ class Database:
                   teff_range: Optional[Tuple[float, float]] = None,
                   data_folder: Optional[str] = None) -> None:
         """
+        Method for adding a grid of model spectra to the database. All spectra have been resampled
+        to a lower, constant spectral resolution (typically :math:`R = 5000`).
+
         Parameters
         ----------
         model : str
             Model name ('ames-cond', 'ames-dusty', 'atmo', 'bt-settl', 'bt-settl-cifist',
             'bt-nextgen', 'drift-phoenix', 'petitcode-cool-clear', 'petitcode-cool-cloudy',
             'petitcode-hot-clear', 'petitcode-hot-cloudy', 'exo-rem', 'blackbody', bt-cond',
-            or 'bt-cond-feh).
+            'bt-cond-feh, 'morley-2012').
         wavel_range : tuple(float, float), None
-            Wavelength range (um). Optional for the DRIFT-PHOENIX and petitCODE models. For
-            these models, the original wavelength points are used if set to ``None``.
-            which case the argument can be set to ``None``.
+            Wavelength range (um) for adding a subset of the spectra. The full wavelength range
+            is used if the argument is set to ``None``.
         spec_res : float, None
-            Spectral resolution. The parameter is optional for the DRIFT-PHOENIX, petitCODE,
-            BT-Settl, and Exo-REM models. The argument is only used if ``wavel_range`` is not
+            Spectral resolution to which the spectra will be resampled. This parameter is optional
+            since the spectra have already been resampled to a lower, constant resolution
+            (typically :math:`R = 5000`). The argument is only used if ``wavel_range`` is not
             ``None``.
         teff_range : tuple(float, float), None
-            Effective temperature range (K). Setting the value to None for will add all available
-            temperatures.
+            Effective temperature range (K) for adding a subset of the model grid. The full
+            parameter grid will be added if the argument is set to ``None``.
         data_folder : str, None
-            Folder with input data. This parameter has been deprecated since all model spectra
-            are publicly available.
+            DEPRECATED: Folder where the input data is located. This parameter is no longer in use
+            since all model spectra are publicly available. The parameter will be removed in a
+            future release.
 
         Returns
         -------
@@ -473,6 +477,15 @@ class Database:
                                             spec_res)
 
             data_util.add_missing(model, ['teff', 'logg', 'feh'], h5_file)
+
+        elif model == 'morley-2012':
+            morley2012.add_morley2012(self.input_path,
+                                      h5_file,
+                                      wavel_range,
+                                      teff_range,
+                                      spec_res)
+
+            data_util.add_missing(model, ['teff', 'logg', 'fsed'], h5_file)
 
         elif model == 'petitcode-cool-clear':
             petitcode.add_petitcode_cool_clear(self.input_path,
@@ -909,7 +922,7 @@ class Database:
 
                                 corr_warn = f'The covariance matrix from {value[1]} contains ' \
                                             f'ones along the diagonal. Converting this ' \
-                                            f'correlation  matrix into a covariance matrix.'
+                                            f'correlation matrix into a covariance matrix.'
 
                                 if data.ndim == 2 and data.shape[0] == data.shape[1]:
                                     if key not in read_cov:
@@ -1394,6 +1407,70 @@ class Database:
         return median_sample
 
     @typechecked
+    def get_compare_sample(self,
+                           tag: str,
+                           spec_fix: Optional[str] = None) -> Dict[str, float]:
+        """
+        Function for extracting the sample parameters with the highest posterior probability.
+
+        Parameters
+        ----------
+        tag : str
+            Database tag where the results from
+            :meth:`~species.analysis.compare_spectra.CompareSpectra.compare_model` are stored.
+        spec_fix : str, None
+            After comparing multiple spectra with a model grid, one of the flux scalings need to
+            be used to calculate the planet radius (i.e. scaling = (radius/distance)^2). The name
+            of this spectrum is specified as argument of ``spec_fix``. For the other spectra,
+            the same radius will be used and an additional scaling parameter will be included in
+            the returned dictionary. When passing the returned dictionary to
+            :func:`~species.util.read_util.update_spectra`, the spectra can be updated with the
+            derived scaling corrections. The argument can be set to ``None`` if a single spectrum
+            was used for the comparison.
+
+        Returns
+        -------
+        dict
+            Dictionary with the best-fit parameters.
+        """
+
+        with h5py.File(self.database, 'a') as h5_file:
+            dset = h5_file[f'results/comparison/{tag}/goodness_of_fit']
+
+            n_param = dset.attrs['n_param']
+            n_spec_name = dset.attrs['n_spec_name']
+
+            model_param = {}
+
+            for i in range(n_param):
+                model_param[dset.attrs[f'parameter{i}']] = dset.attrs[f'best_param{i}']
+
+            model_param['distance'] = dset.attrs['distance']
+
+            if n_spec_name == 1:
+                model_param['radius'] = dset.attrs[f'radius_{item}']
+
+            else:
+                if spec_fix is None:
+                    raise ValueError('The argument of \'spec_fix\' should be set when the results '
+                                     'from CompareSpectra.compare_model have been obtained by '
+                                     'combining multiple spectra (i.e. the argument of '
+                                     '\'spec_name\' in CompareSpectra).')
+
+                model_param['radius'] = dset.attrs[f'radius_{spec_fix}']
+
+                for i in range(n_spec_name):
+                    spec_name = dset.attrs[f'spec_name{i}']
+
+                    if spec_name == spec_fix:
+                        continue
+
+                    model_param[f'scaling_{spec_name}'] = (
+                        dset.attrs[f'radius_{spec_fix}'] / dset.attrs[f'radius_{spec_name}'])**2
+
+        return model_param
+
+    @typechecked
     def get_mcmc_spectra(self,
                          tag: str,
                          random: int,
@@ -1767,7 +1844,8 @@ class Database:
     def get_samples(self,
                     tag: str,
                     burnin: Optional[int] = None,
-                    random: Optional[int] = None) -> box.SamplesBox:
+                    random: Optional[int] = None,
+                    out_file: Optional[str] = None) -> box.SamplesBox:
         """
         Parameters
         ----------
@@ -1780,6 +1858,10 @@ class Database:
         random : int, None
             Number of random samples to select. All samples (with the burnin excluded) are
             selected if set to ``None``.
+        out_file : str, None
+            Output file to store the posterior samples. The data will be stored in a FITS file if
+            the argument of ``out_file`` ends with `.fits`. Otherwise, the data will be written to
+            a text file. The data will not be written to a file if the argument is set to ``None``.
 
         Returns
         -------
@@ -1834,6 +1916,19 @@ class Database:
 
         median_sample = self.get_median_sample(tag, burnin)
 
+        if out_file is not None:
+            header = ''
+            for i, item in enumerate(param):
+                header += f'{item}'
+                if i != len(param) - 1:
+                    header += ' - '
+
+            if out_file.endswith('.fits'):
+                fits.writeto(out_file, samples, overwrite=True)
+
+            else:
+                np.savetxt(out_file, samples, header=header)
+
         return box.create_box('samples',
                               spectrum=spectrum,
                               parameters=param,
@@ -1869,7 +1964,7 @@ class Database:
         flux_scaling : list(float)
             Array with the best-fit scaling values to match the library spectra with the data.
         av_ext : list(float)
-            Array with the visual extinctions A_V.
+            Array with the visual extinction :math:`A_V`.
         rad_vel : list(float)
             Array with the radial velocities (km s-1).
         object_name : str
@@ -1918,3 +2013,99 @@ class Database:
             h5_file.create_dataset(f'results/empirical/{tag}/flux_scaling', data=flux_scaling)
             h5_file.create_dataset(f'results/empirical/{tag}/av_ext', data=av_ext)
             h5_file.create_dataset(f'results/empirical/{tag}/rad_vel', data=rad_vel)
+
+    @typechecked
+    def add_comparison(self,
+                       tag: str,
+                       goodness_of_fit: np.ndarray,
+                       flux_scaling: np.ndarray,
+                       model_param: List[str],
+                       coord_points: List[np.ndarray],
+                       object_name: str,
+                       spec_name: List[str],
+                       model: str) -> None:
+        """
+        Parameters
+        ----------
+        tag : str
+            Database tag where the results will be stored.
+        goodness_of_fit : np.ndarray
+            Array with the goodness-of-fit values.
+        flux_scaling : np.ndarray
+            Array with the best-fit scaling values to match the model spectra with the data.
+        model_param : list(str)
+            List with the names of the model parameters.
+        coord_points : list(np.ndarray)
+            List with 1D arrays of the model grid points, in the same order as ``model_param``.
+        object_name : str
+            Object name as stored in the database with
+            :func:`~species.data.database.Database.add_object` or
+            :func:`~species.data.database.Database.add_companion`.
+        spec_name : list(str)
+            List with spectrum names that are stored at the object data of ``object_name``.
+        model : str
+            Atmospheric model grid that is used for the comparison.
+
+        Returns
+        -------
+        NoneType
+            None
+        """
+
+        read_obj = read_object.ReadObject(object_name)
+        distance = read_obj.get_distance()[0]  # (pc)
+
+        with h5py.File(self.database, 'a') as h5_file:
+
+            if 'results' not in h5_file:
+                h5_file.create_group('results')
+
+            if 'results/comparison' not in h5_file:
+                h5_file.create_group('results/comparison')
+
+            if f'results/comparison/{tag}' in h5_file:
+                del h5_file[f'results/comparison/{tag}']
+
+            dset = h5_file.create_dataset(f'results/comparison/{tag}/goodness_of_fit',
+                                          data=goodness_of_fit)
+
+            dset.attrs['object_name'] = str(object_name)
+            dset.attrs['model'] = str(model)
+            dset.attrs['n_param'] = len(model_param)
+            dset.attrs['n_spec_name'] = len(spec_name)
+            dset.attrs['distance'] = distance
+
+            for i, item in enumerate(model_param):
+                dset.attrs[f'parameter{i}'] = item
+
+            for i, item in enumerate(spec_name):
+                dset.attrs[f'spec_name{i}'] = item
+
+            h5_file.create_dataset(f'results/comparison/{tag}/flux_scaling', data=flux_scaling)
+
+            for i, item in enumerate(coord_points):
+                h5_file.create_dataset(f'results/comparison/{tag}/coord_points{i}', data=item)
+
+            # Sum the goodness-of-fit of the different spectra
+            goodness_sum = np.sum(goodness_of_fit, axis=-1)
+
+            # Indices of the best-fit model
+            best_index = np.unravel_index(goodness_sum.argmin(), goodness_sum.shape)
+
+            print('Best-fit parameters:')
+
+            for i, item in enumerate(model_param):
+                best_param = coord_points[i][best_index[i]]
+                dset.attrs[f'best_param{i}'] = best_param
+
+            for i, item in enumerate(spec_name):
+                scaling = flux_scaling[best_index[0], best_index[1], best_index[2], i]
+
+                radius = np.sqrt(scaling * (distance*constants.PARSEC)**2)  # (m)
+                radius /= constants.R_JUP  # (Rjup)
+
+                dset.attrs[f'radius_{item}'] = radius
+                print(f' -   {item} radius (Rjup) = {radius:.2f}')
+
+                dset.attrs[f'scaling_{item}'] = scaling
+                print(f' -   {item} scaling = {scaling:.2e}')

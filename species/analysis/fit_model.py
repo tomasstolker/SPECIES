@@ -1184,7 +1184,7 @@ class FitModel:
         # Add samples to the database
 
         if mpi_rank == 0:
-            # Writing the samples to the database is only possible when using a single CPU
+            # Writing the samples to the database is only possible when using a single process
             species_db = database.Database()
 
             species_db.add_samples(sampler='emcee',
@@ -1791,7 +1791,7 @@ class FitModel:
         # Add samples to the database
 
         if mpi_rank == 0:
-            # Writing the samples to the database is only possible when using a single CPU
+            # Writing the samples to the database is only possible when using a single process
             species_db = database.Database()
 
             species_db.add_samples(sampler='multinest',

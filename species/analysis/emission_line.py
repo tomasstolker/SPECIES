@@ -16,7 +16,7 @@ from astropy import units as u
 from astropy.modeling.fitting import LinearLSQFitter
 from astropy.modeling.polynomial import Polynomial1D
 from astropy.nddata import StdDevUncertainty
-from scipy.interpolate import interp1d
+from scipy.interpolate import interp1d, InterpolatedUnivariateSpline
 from specutils import Spectrum1D
 from specutils.fitting import fit_generic_continuum
 from typeguard import typechecked
@@ -36,6 +36,7 @@ class EmissionLine:
     def __init__(self,
                  object_name: str,
                  spec_name: str,
+                 lambda_rest: float,
                  wavel_range: Optional[Tuple[float, float]] = None) -> None:
         """
         Parameters
@@ -46,6 +47,9 @@ class EmissionLine:
             :func:`~species.data.database.Database.add_companion`.
         spec_name : str
             Name of the spectrum that is stored at the object data of ``object_name``.
+        lambda_rest : float, None
+            Rest wavelength (um) of the emission line. The parameter is used for calculating
+            the radial velocity and its uncertainty.
         wavel_range : tuple(float, float), None
             Wavelength range (um) that is cropped from the spectrum. The full spectrum is used if
             the argument is set to ``None``.
@@ -58,8 +62,10 @@ class EmissionLine:
 
         self.object_name = object_name
         self.spec_name = spec_name
+        self.lambda_rest = lambda_rest
 
         self.object = read_object.ReadObject(object_name)
+        self.distance = self.object.get_distance()[0]
 
         self.spectrum = self.object.get_spectrum()[spec_name][0]
 
@@ -73,6 +79,9 @@ class EmissionLine:
                                (self.spectrum[:, 0] <= wavel_range[1]))[0]
 
             self.spectrum = self.spectrum[indices, ]
+
+        self.spec_vrad = 1e-3 * constants.LIGHT * \
+            (self.spectrum[:, 0] - self.lambda_rest) / self.lambda_rest
 
         self.continuum_flux = np.full(self.spectrum.shape[0], 0.)
         self.continuum_check = False
@@ -145,36 +154,59 @@ class EmissionLine:
 
         ax1 = plt.subplot(gs[0, 0])
         ax2 = plt.subplot(gs[1, 0])
+        ax3 = ax1.twiny()
+        ax4 = ax2.twiny()
 
         ax1.tick_params(axis='both', which='major', colors='black', labelcolor='black',
-                        direction='in', width=1, length=5, labelsize=12, top=True, bottom=True,
+                        direction='in', width=1, length=5, labelsize=12, top=False, bottom=True,
                         left=True, right=True, labelbottom=False)
 
         ax1.tick_params(axis='both', which='minor', colors='black', labelcolor='black',
-                        direction='in', width=1, length=3, labelsize=12, top=True, bottom=True,
+                        direction='in', width=1, length=3, labelsize=12, top=False, bottom=True,
                         left=True, right=True, labelbottom=False)
 
         ax2.tick_params(axis='both', which='major', colors='black', labelcolor='black',
-                        direction='in', width=1, length=5, labelsize=12, top=True, bottom=True,
+                        direction='in', width=1, length=5, labelsize=12, top=False, bottom=True,
                         left=True, right=True)
 
         ax2.tick_params(axis='both', which='minor', colors='black', labelcolor='black',
-                        direction='in', width=1, length=3, labelsize=12, top=True, bottom=True,
+                        direction='in', width=1, length=3, labelsize=12, top=False, bottom=True,
                         left=True, right=True)
 
-        ax2.set_xlabel('Wavelength (µm)', fontsize=16)
-        ax1.set_ylabel('Flux (W m$^{-2}$ µm$^{-1}$)', fontsize=16)
-        ax2.set_ylabel('Flux (W m$^{-2}$ µm$^{-1}$)', fontsize=16)
+        ax3.tick_params(axis='both', which='major', colors='black', labelcolor='black',
+                        direction='in', width=1, length=5, labelsize=12, top=True, bottom=False,
+                        left=True, right=True)
 
-        ax2.get_xaxis().set_label_coords(0.5, -0.1)
+        ax3.tick_params(axis='both', which='minor', colors='black', labelcolor='black',
+                        direction='in', width=1, length=3, labelsize=12, top=True, bottom=False,
+                        left=True, right=True)
+
+        ax4.tick_params(axis='both', which='major', colors='black', labelcolor='black',
+                        direction='in', width=1, length=5, labelsize=12, top=True, bottom=False,
+                        left=True, right=True, labeltop=False)
+
+        ax4.tick_params(axis='both', which='minor', colors='black', labelcolor='black',
+                        direction='in', width=1, length=3, labelsize=12, top=True, bottom=False,
+                        left=True, right=True, labeltop=False)
+
+        ax1.set_ylabel('Flux (W m$^{-2}$ µm$^{-1}$)', fontsize=16)
+        ax2.set_xlabel('Wavelength (µm)', fontsize=16)
+        ax2.set_ylabel('Flux (W m$^{-2}$ µm$^{-1}$)', fontsize=16)
+        ax3.set_xlabel('Velocity (km s$^{-1}$)', fontsize=16)
+
         ax1.get_yaxis().set_label_coords(-0.1, 0.5)
+        ax2.get_xaxis().set_label_coords(0.5, -0.1)
         ax2.get_yaxis().set_label_coords(-0.1, 0.5)
+        ax3.get_xaxis().set_label_coords(0.5, 1.12)
 
         ax1.plot(spec_extract.spectral_axis, spec_extract.flux, color='black', label=self.spec_name)
         ax1.plot(spec_extract.spectral_axis, continuum_fit, color='tab:blue', label='Continuum fit')
 
         ax2.plot(spec_cont_sub.spectral_axis, spec_cont_sub.flux,
                  color='black', label='Continuum subtracted')
+
+        ax3.plot(self.spec_vrad, spec_extract.flux, ls='-', lw=0.)
+        ax4.plot(self.spec_vrad, spec_cont_sub.flux, ls='-', lw=0.)
 
         ax1.legend(loc='upper right', frameon=False, fontsize=12.)
         ax2.legend(loc='upper right', frameon=False, fontsize=12.)
@@ -191,13 +223,183 @@ class EmissionLine:
         self.continuum_check = True
 
     @typechecked
+    def integrate_flux(self,
+                       wavel_int: Tuple[float, float],
+                       interp_kind: str = 'linear',
+                       plot_filename: str = 'int_line.pdf') -> Union[np.float64, np.float64]:
+        """
+        Method for calculating the integrated line flux and error. The spectrum is first
+        interpolated to :math:`R = 100000` and then integrated across the specified wavelength
+        range with the composite trapezoidal rule of ``np.trapz``. The error is estimated with
+        a Monte Carlo approach from 1000 samples.
+
+        Parameters
+        ----------
+        wavel_int : tuple(float, float)
+            Wavelength range (um) across which the flux will be integrated.
+        interp_kind : str
+            Kind of interpolation kind for ``scipy.interpolate.interp1d`` (default: 'linear').
+        plot_filename : str
+            Filename for the plot with the interpolated line profile.
+
+        Returns
+        -------
+        float
+            Integrated line flux (W m-2).
+        float
+            Flux error (W m-2).
+        """
+
+        print(f'Plotting integrated line: {plot_filename}...', end='', flush=True)
+
+        n_samples = 1000
+
+        wavel_high_res = read_util.create_wavelengths(wavel_int, 1e5)
+
+        # Creating plot
+
+        mpl.rcParams['font.serif'] = ['Bitstream Vera Serif']
+        mpl.rcParams['font.family'] = 'serif'
+
+        plt.rc('axes', edgecolor='black', linewidth=2)
+        plt.rcParams['axes.axisbelow'] = False
+
+        plt.figure(1, figsize=(6, 3))
+        gs = mpl.gridspec.GridSpec(1, 1)
+        gs.update(wspace=0, hspace=0, left=0, right=1, bottom=0, top=1)
+
+        ax1 = plt.subplot(gs[0, 0])
+        ax2 = ax1.twiny()
+
+        ax1.tick_params(axis='both', which='major', colors='black', labelcolor='black',
+                        direction='in', width=1, length=5, labelsize=12, top=False, bottom=True,
+                        left=True, right=True)
+
+        ax1.tick_params(axis='both', which='minor', colors='black', labelcolor='black',
+                        direction='in', width=1, length=3, labelsize=12, top=False, bottom=True,
+                        left=True, right=True)
+
+        ax2.tick_params(axis='both', which='major', colors='black', labelcolor='black',
+                        direction='in', width=1, length=5, labelsize=12, top=True, bottom=False,
+                        left=False, right=True)
+
+        ax2.tick_params(axis='both', which='minor', colors='black', labelcolor='black',
+                        direction='in', width=1, length=3, labelsize=12, top=True, bottom=False,
+                        left=False, right=True)
+
+        ax1.set_xlabel('Wavelength (µm)', fontsize=16)
+        ax1.set_ylabel('Flux (W m$^{-2}$ µm$^{-1}$)', fontsize=16)
+        ax2.set_xlabel('Velocity (km s$^{-1}$)', fontsize=16)
+
+        ax1.get_xaxis().set_label_coords(0.5, -0.12)
+        ax1.get_yaxis().set_label_coords(-0.1, 0.5)
+        ax2.get_xaxis().set_label_coords(0.5, 1.12)
+
+        ax1.plot(self.spectrum[:, 0], self.spectrum[:, 1], color='black', label=self.spec_name)
+        ax2.plot(self.spec_vrad, self.spectrum[:, 1], ls='-', lw=0.)
+
+        flux_sample = np.zeros(n_samples)
+        fwhm_sample = np.zeros(n_samples)
+        mean_sample = np.zeros(n_samples)
+        vrad_sample = np.zeros(n_samples)
+        lum_sample = np.zeros(n_samples)
+
+        for i in range(n_samples):
+            # Sample fluxes from random errors
+            spec_rand = np.random.normal(self.spectrum[:, 1], self.spectrum[:, 2])
+
+            # Interpolate sampled spectrum
+            spec_interp = interp1d(self.spectrum[:, 0],
+                                   spec_rand,
+                                   kind=interp_kind,
+                                   bounds_error=False)
+
+            # Resample to high-resolution wavelengths
+            flux_rand = spec_interp(wavel_high_res)
+
+            # Integrate line flux (W m-2)
+            flux_sample[i] = np.trapz(flux_rand, wavel_high_res)
+
+            # Line luminosity (Lsun)
+            lum_sample[i] = 4. * np.pi * (self.distance*constants.PARSEC)**2 * flux_sample[i]
+            lum_sample[i] /= constants.L_SUN  # (Lsun)
+
+            # Weighted (with flux) mean wavelength (um)
+            mean_sample[i] = np.trapz(wavel_high_res*flux_rand, wavel_high_res) / \
+                np.trapz(flux_rand, wavel_high_res)
+
+            # Radial velocity (km s-1)
+            vrad_sample[i] = 1e-3*constants.LIGHT * \
+                (mean_sample[i]-self.lambda_rest) / self.lambda_rest
+
+            # Find full width at half maximum
+
+            spline = InterpolatedUnivariateSpline(wavel_high_res, flux_rand-np.max(flux_rand)/2.)
+            root = spline.roots()
+
+            diff = root - mean_sample[i]
+
+            root1 = np.amax(diff[diff < 0.])
+            root2 = np.amin(diff[diff > 0.])
+
+            fwhm_sample[i] = 1e-3*constants.LIGHT*(root2 - root1)/mean_sample[i]
+
+            # Add 30 samples to the plot
+
+            if i == 0:
+                ax1.plot(wavel_high_res, flux_rand, ls='-', lw=0.5, color='gray',
+                         alpha=0.4, label='Random sample')
+
+            elif i < 30:
+                ax1.plot(wavel_high_res, flux_rand, ls='-', lw=0.5, color='gray', alpha=0.4)
+
+        # Line flux from original, interpolated spectrum
+
+        spec_interp = interp1d(self.spectrum[:, 0],
+                               self.spectrum[:, 1],
+                               kind=interp_kind,
+                               bounds_error=False)
+
+        flux_high_res = spec_interp(wavel_high_res)
+
+        line_flux = np.trapz(flux_high_res, wavel_high_res)
+
+        ax1.plot(wavel_high_res, flux_high_res, color='tab:blue', label='High resolution')
+
+        ax1.legend(loc='upper right', frameon=False, fontsize=12.)
+
+        plt.savefig(plot_filename, bbox_inches='tight')
+        plt.clf()
+        plt.close()
+
+        print(' [DONE]')
+
+        wavel_mean, wavel_std = np.mean(mean_sample), np.std(mean_sample)
+        print(f'Mean wavelength (nm): {1e3*wavel_mean:.2f} +/- {1e3*wavel_std:.2f}')
+
+        fwhm_mean, fwhm_std = np.mean(fwhm_sample), np.std(fwhm_sample)
+        print(f'FWHM (km s-1): {fwhm_mean:.2f} +/- {fwhm_std:.2f}')
+
+        vrad_mean, vrad_std = np.mean(vrad_sample), np.std(vrad_sample)
+        print(f'Radial velocity (km s-1): {vrad_mean:.1f} +/- {vrad_std:.1f}')
+
+        line_error = np.std(flux_sample)
+        print(f'Line flux (W m-2): {line_flux:.2e} +/- {line_error:.2e}')
+
+        lum_mean, lum_std = np.mean(lum_sample), np.std(lum_sample)
+        print(f'Line luminosity (Lsun): {lum_mean:.2e} +/- {lum_std:.2e}')
+
+        return line_flux, line_error
+
+    @typechecked
     def fit_gaussian(self,
                      tag: str,
                      min_num_live_points: float = 400,
                      bounds: Dict[str, Union[Tuple[float, float]]] = None,
                      output: str = 'ultranest/',
                      plot_filename: str = 'line_fit.pdf',
-                     show_status: bool = True) -> None:
+                     show_status: bool = True,
+                     double_gaussian: bool = False) -> None:
         """
         Method for fitting a Gaussian profile to an emission line and using ``UltraNest`` for
         sampling the posterior distributions and estimating the evidence.
@@ -220,6 +422,11 @@ class EmissionLine:
             Filename for the plot with the best-fit line profile.
         show_status : bool
             Print information about the convergence.
+        double_gaussian : bool
+            Set to ``True`` for fitting a double instead of a single Gaussian. In that case, the
+            ``bounds`` dictionary may also contain ``'gauss_amplitude_2'``, ``'gauss_mean_2'``,
+            and ``'gauss_sigma_2'`` (otherwise conservative parameter boundaries are estimated
+            from the data).
 
         Returns
         -------
@@ -241,6 +448,11 @@ class EmissionLine:
 
         modelpar = ['gauss_amplitude', 'gauss_mean', 'gauss_sigma']
 
+        if double_gaussian:
+            modelpar.append('gauss_amplitude_2')
+            modelpar.append('gauss_mean_2')
+            modelpar.append('gauss_sigma_2')
+
         # Create a dictionary with the cube indices of the parameters
 
         cube_index = {}
@@ -260,6 +472,16 @@ class EmissionLine:
 
         if 'gauss_sigma' not in bounds:
             bounds['gauss_sigma'] = (0., self.spectrum[-1, 0]-self.spectrum[0, 0])
+
+        if double_gaussian:
+            if 'gauss_amplitude_2' not in bounds:
+                bounds['gauss_amplitude_2'] = (0., 2.*np.amax(self.spectrum[:, 1]))
+
+            if 'gauss_mean_2' not in bounds:
+                bounds['gauss_mean_2'] = (self.spectrum[0, 0], self.spectrum[-1, 0])
+
+            if 'gauss_sigma_2' not in bounds:
+                bounds['gauss_sigma_2'] = (0., self.spectrum[-1, 0]-self.spectrum[0, 0])
 
         # Get the MPI rank of the process
 
@@ -324,6 +546,12 @@ class EmissionLine:
                                            params[cube_index['gauss_sigma']],
                                            self.spectrum[:, 0])
 
+            if double_gaussian:
+                model_flux += gaussian_function(params[cube_index['gauss_amplitude_2']],
+                                                params[cube_index['gauss_mean_2']],
+                                                params[cube_index['gauss_sigma_2']],
+                                                self.spectrum[:, 0])
+
             chi_sq = -0.5 * (data_flux-model_flux)**2 / data_var
 
             return np.nansum(chi_sq)
@@ -374,8 +602,13 @@ class EmissionLine:
                        'gauss_mean': np.median(samples[:, 1]),
                        'gauss_sigma': np.median(samples[:, 2])}
 
+        if double_gaussian:
+            model_param['gauss_amplitude_2'] = np.median(samples[:, 3])
+            model_param['gauss_mean_2'] = np.median(samples[:, 4])
+            model_param['gauss_sigma_2'] = np.median(samples[:, 5])
+
         best_model = read_util.gaussian_spectrum(
-            self.wavel_range, model_param, spec_res=high_spec_res)
+            self.wavel_range, model_param, spec_res=high_spec_res, double_gaussian=double_gaussian)
 
         # Interpolate high-resolution continuum
 
@@ -402,8 +635,6 @@ class EmissionLine:
 
         print('Calculating line fluxes...', end='', flush=True)
 
-        distance = self.object.get_distance()[0]
-
         modelpar.append('line_flux')
         modelpar.append('line_luminosity')
 
@@ -419,12 +650,18 @@ class EmissionLine:
                            'gauss_mean': samples[i, 1],
                            'gauss_sigma': samples[i, 2]}
 
+            if double_gaussian:
+                model_param['gauss_amplitude_2'] = samples[i, 3]
+                model_param['gauss_mean_2'] = samples[i, 4]
+                model_param['gauss_sigma_2'] = samples[i, 5]
+
             model_box = read_util.gaussian_spectrum(
-                self.wavel_range, model_param, spec_res=high_spec_res)
+                self.wavel_range, model_param, spec_res=high_spec_res,
+                double_gaussian=double_gaussian)
 
             line_flux[i] = np.trapz(model_box.flux, model_box.wavelength)  # (W m-2)
 
-            line_lum[i] = 4. * np.pi * (distance*constants.PARSEC)**2 * line_flux[i]  # (W)
+            line_lum[i] = 4. * np.pi * (self.distance*constants.PARSEC)**2 * line_flux[i]  # (W)
             line_lum[i] /= constants.L_SUN  # (Lsun)
 
             if self.continuum_check:
@@ -446,6 +683,23 @@ class EmissionLine:
         if self.continuum_check:
             eq_width = eq_width[..., np.newaxis]
             samples = np.append(samples, eq_width, axis=1)
+
+        if self.lambda_rest is not None:
+            # Radial velocity (km s-1)
+
+            if double_gaussian:
+                # Weighted (with Gaussian amplitudes) mean of the central wavelength
+                v_fit = (samples[:, 0]*samples[:, 1] + samples[:, 3]*samples[:, 4]) / \
+                    (samples[:, 0]+samples[:, 3])
+
+            else:
+                v_fit = samples[:, 1]
+
+            v_rad = 1e-3*constants.LIGHT * (v_fit-self.lambda_rest) / self.lambda_rest
+            v_rad = v_rad[..., np.newaxis]
+
+            modelpar.append('line_vrad')
+            samples = np.append(samples, v_rad, axis=1)
 
         print(' [DONE]')
 
@@ -483,7 +737,7 @@ class EmissionLine:
                                    spectrum=('model', 'gaussian'),
                                    tag=tag,
                                    modelpar=modelpar,
-                                   distance=distance,
+                                   distance=self.distance,
                                    spec_labels=None)
 
         # Create plot
@@ -502,30 +756,50 @@ class EmissionLine:
 
         ax1 = plt.subplot(gs[0, 0])
         ax2 = plt.subplot(gs[1, 0])
+        ax3 = ax1.twiny()
+        ax4 = ax2.twiny()
 
         ax1.tick_params(axis='both', which='major', colors='black', labelcolor='black',
-                        direction='in', width=1, length=5, labelsize=12, top=True, bottom=True,
+                        direction='in', width=1, length=5, labelsize=12, top=False, bottom=True,
                         left=True, right=True, labelbottom=False)
 
         ax1.tick_params(axis='both', which='minor', colors='black', labelcolor='black',
-                        direction='in', width=1, length=3, labelsize=12, top=True, bottom=True,
+                        direction='in', width=1, length=3, labelsize=12, top=False, bottom=True,
                         left=True, right=True, labelbottom=False)
 
         ax2.tick_params(axis='both', which='major', colors='black', labelcolor='black',
-                        direction='in', width=1, length=5, labelsize=12, top=True, bottom=True,
+                        direction='in', width=1, length=5, labelsize=12, top=False, bottom=True,
                         left=True, right=True)
 
         ax2.tick_params(axis='both', which='minor', colors='black', labelcolor='black',
-                        direction='in', width=1, length=3, labelsize=12, top=True, bottom=True,
+                        direction='in', width=1, length=3, labelsize=12, top=False, bottom=True,
                         left=True, right=True)
 
-        ax2.set_xlabel('Wavelength (µm)', fontsize=16)
-        ax1.set_ylabel('Flux (W m$^{-2}$ µm$^{-1}$)', fontsize=16)
-        ax2.set_ylabel('Flux (W m$^{-2}$ µm$^{-1}$)', fontsize=16)
+        ax3.tick_params(axis='both', which='major', colors='black', labelcolor='black',
+                        direction='in', width=1, length=5, labelsize=12, top=True, bottom=False,
+                        left=True, right=True)
 
-        ax2.get_xaxis().set_label_coords(0.5, -0.1)
+        ax3.tick_params(axis='both', which='minor', colors='black', labelcolor='black',
+                        direction='in', width=1, length=3, labelsize=12, top=True, bottom=False,
+                        left=True, right=True)
+
+        ax4.tick_params(axis='both', which='major', colors='black', labelcolor='black',
+                        direction='in', width=1, length=5, labelsize=12, top=True, bottom=False,
+                        left=True, right=True, labeltop=False)
+
+        ax4.tick_params(axis='both', which='minor', colors='black', labelcolor='black',
+                        direction='in', width=1, length=3, labelsize=12, top=True, bottom=False,
+                        left=True, right=True, labeltop=False)
+
+        ax1.set_ylabel('Flux (W m$^{-2}$ µm$^{-1}$)', fontsize=16)
+        ax2.set_xlabel('Wavelength (µm)', fontsize=16)
+        ax2.set_ylabel('Flux (W m$^{-2}$ µm$^{-1}$)', fontsize=16)
+        ax3.set_xlabel('Velocity (km s$^{-1}$)', fontsize=16)
+
         ax1.get_yaxis().set_label_coords(-0.1, 0.5)
+        ax2.get_xaxis().set_label_coords(0.5, -0.1)
         ax2.get_yaxis().set_label_coords(-0.1, 0.5)
+        ax3.get_xaxis().set_label_coords(0.5, 1.12)
 
         ax1.plot(self.spectrum[:, 0], self.spectrum[:, 1]+self.continuum_flux,
                  color='black', label=self.spec_name)
@@ -537,6 +811,9 @@ class EmissionLine:
 
         ax2.plot(best_model.wavelength, best_model.flux, color='tab:blue',
                  label='Best-fit line profile')
+
+        ax3.plot(self.spec_vrad, self.spectrum[:, 1]+self.continuum_flux, ls='-', lw=0.)
+        ax4.plot(self.spec_vrad, self.spectrum[:, 1], ls='-', lw=0.)
 
         ax1.legend(loc='upper left', frameon=False, fontsize=12.)
         ax2.legend(loc='upper left', frameon=False, fontsize=12.)

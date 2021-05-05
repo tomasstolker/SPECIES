@@ -1,6 +1,6 @@
 from species.analysis.emission_line import EmissionLine
 
-from species.analysis.empirical import CompareSpectra
+from species.analysis.compare_spectra import CompareSpectra
 
 from species.analysis.fit_model import FitModel
 
@@ -39,8 +39,9 @@ from species.data.companions import get_data
 
 from species.data.database import Database
 
-from species.plot.plot_empirical import plot_statistic, \
-                                        plot_empirical_spectra
+from species.plot.plot_comparison import plot_statistic, \
+                                         plot_empirical_spectra, \
+                                         plot_grid_statistic
 
 from species.plot.plot_color import plot_color_magnitude, \
                                     plot_color_color
@@ -71,7 +72,7 @@ from species.util.read_util import add_luminosity, \
 
 __author__ = 'Tomas Stolker'
 __license__ = 'MIT'
-__version__ = '0.3.5'
+__version__ = '0.3.6'
 __maintainer__ = 'Tomas Stolker'
 __email__ = 'stolker@strw.leidenuniv.nl'
 __status__ = 'Development'

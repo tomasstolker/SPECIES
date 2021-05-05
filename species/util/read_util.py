@@ -351,7 +351,8 @@ def powerlaw_spectrum(wavel_range: Union[Tuple[float, float],
 def gaussian_spectrum(wavel_range: Union[Tuple[float, float],
                                          Tuple[np.float32, np.float32]],
                       model_param: Dict[str, float],
-                      spec_res: float = 100.) -> box.ModelBox:
+                      spec_res: float = 100.,
+                      double_gaussian: bool = False) -> box.ModelBox:
     """
     Function for calculating a Gaussian spectrum (i.e. for an emission line).
 
@@ -360,10 +361,13 @@ def gaussian_spectrum(wavel_range: Union[Tuple[float, float],
     wavel_range : tuple(float, float)
         Tuple with the minimum and maximum wavelength (um).
     model_param : dict
-        Dictionary with the model parameters. Should contain `'gauss_amplitude'`, `'gauss_mean'`,
-        `'gauss_sigma'`, and optionally `'gauss_offset'`.
+        Dictionary with the model parameters. Should contain ``'gauss_amplitude'``,
+        ``'gauss_mean'``, ``'gauss_sigma'``, and optionally ``'gauss_offset'``.
     spec_res : float
         Spectral resolution (default: 100).
+    double_gaussian : bool
+        Set to ``True`` for returning a double Gaussian function. In that case, ``model_param``
+        should also contain ``'gauss_amplitude_2'``, ``'gauss_mean_2'``, and ``'gauss_sigma_2'``.
 
     Returns
     -------
@@ -376,6 +380,12 @@ def gaussian_spectrum(wavel_range: Union[Tuple[float, float],
     gauss_exp = np.exp(-0.5*(wavel-model_param['gauss_mean'])**2/model_param['gauss_sigma']**2)
 
     flux = model_param['gauss_amplitude'] * gauss_exp
+
+    if double_gaussian:
+        gauss_exp = np.exp(-0.5*(wavel-model_param['gauss_mean_2'])**2 /
+                           model_param['gauss_sigma_2']**2)
+
+        flux += model_param['gauss_amplitude_2'] * gauss_exp
 
     if 'gauss_offset' in model_param:
         flux += model_param['gauss_offset']

@@ -76,6 +76,11 @@ class ReadModel:
 
         self.database = config['species']['database']
 
+        self.extra_param = ['radius', 'distance', 'mass', 'luminosity', 'lognorm_radius',
+                            'lognorm_sigma', 'lognorm_ext', 'ism_ext', 'ism_red', 'powerlaw_max',
+                            'powerlaw_exp', 'powerlaw_ext', 'disk_teff', 'disk_radius',
+                            'veil_a', 'veil_b', 'veil_ref']
+
     @typechecked
     def open_database(self) -> h5py._hl.files.File:
         """
@@ -576,13 +581,12 @@ class ReadModel:
             obtained with :func:`~species.read.read_model.ReadModel.get_bounds()`.
         spec_res : float, None
             Spectral resolution that is used for smoothing the spectrum with a Gaussian kernel
-            when ``smooth=True`` and/or resampling the spectrum when ``wavel_range`` of
-            ``FitModel`` is not ``None``. The original wavelength points are used if both
-            ``spec_res`` and ``wavel_resample`` are set to ``None``, or if ``smooth`` is set to
-            ``True``.
+            when ``smooth=True``. The wavelengths will be resampled to the argument of
+            ``spec_res`` if ``smooth=False``.
         wavel_resample : np.ndarray, None
             Wavelength points (um) to which the spectrum is resampled. In that case, ``spec_res``
-            can still be used for smoothing the spectrum with a Gaussian kernel.
+            can still be used for smoothing the spectrum with a Gaussian kernel. The original
+            wavelength points are used if the argument is set to ``None``.
         magnitude : bool
             Normalize the spectrum with a flux calibrated spectrum of Vega and return the magnitude
             instead of flux density.
@@ -597,16 +601,11 @@ class ReadModel:
             Box with the model spectrum.
         """
 
-        if smooth and spec_res is None:
-            warnings.warn('The \'spec_res\' argument is required for smoothing the spectrum when '
-                          '\'smooth\' is set to True.')
+        # Get grid boundaries
 
         grid_bounds = self.get_bounds()
 
-        extra_param = ['radius', 'distance', 'mass', 'luminosity', 'lognorm_radius',
-                       'lognorm_sigma', 'lognorm_ext', 'ism_ext', 'ism_red', 'powerlaw_max',
-                       'powerlaw_exp', 'powerlaw_ext', 'disk_teff', 'disk_radius',
-                       'veil_a', 'veil_b', 'veil_ref', 'powerl_ext', 'powerl_exp']
+        # Check if all parameters are present and within the grid boundaries
 
         for key in self.get_parameters():
             if key not in model_param.keys():
@@ -623,23 +622,26 @@ class ReadModel:
                                  f'boundary of the model grid ({model_param[key]} > '
                                  f'{grid_bounds[key][1]}).')
 
+        # Print a warning if redundant parameters are included in the dictionary
+
         for key in model_param.keys():
-            if key not in self.get_parameters() and key not in extra_param:
+            if key not in self.get_parameters() and key not in self.extra_param:
                 warnings.warn(f'The \'{key}\' parameter is not required by \'{self.model}\' so '
                               f'the parameter will be ignored. The mandatory parameters are '
                               f'{self.get_parameters()}.')
 
-        if 'mass' in model_param and 'radius' not in model_param:
-            mass = 1e3 * model_param['mass'] * constants.M_JUP  # (g)
-            radius = math.sqrt(1e3 * constants.GRAVITY * mass / (10.**model_param['logg']))  # (cm)
-            model_param['radius'] = 1e-2 * radius / constants.R_JUP  # (Rjup)
+        # Interpolate the model grid
 
         if self.spectrum_interp is None:
             self.interpolate_model()
 
+        # Set the wavelength range
+
         if self.wavel_range is None:
             wl_points = self.get_wavelengths()
             self.wavel_range = (wl_points[0], wl_points[-1])
+
+        # Create a list with the parameter values
 
         parameters = []
 
@@ -658,16 +660,26 @@ class ReadModel:
         if 'fsed' in model_param:
             parameters.append(model_param['fsed'])
 
+        # Interpolate the spectrum from the grid
+
         flux = self.spectrum_interp(parameters)[0]
 
-        if 'radius' in model_param and 'logg' in model_param:
-            model_param['mass'] = read_util.get_mass(model_param['logg'], model_param['radius'])
+        # Add the radius to the parameter dictionary if the mass if given
+
+        if 'mass' in model_param and 'radius' not in model_param:
+            mass = 1e3 * model_param['mass'] * constants.M_JUP  # (g)
+            radius = math.sqrt(1e3 * constants.GRAVITY * mass / (10.**model_param['logg']))  # (cm)
+            model_param['radius'] = 1e-2 * radius / constants.R_JUP  # (Rjup)
+
+        # Apply (radius/distance)^2 scaling
 
         if 'radius' in model_param and 'distance' in model_param:
             scaling = (model_param['radius']*constants.R_JUP)**2 / \
                       (model_param['distance']*constants.PARSEC)**2
 
             flux *= scaling
+
+        # Add blackbody disk component to the spectrum
 
         if 'disk_teff' in model_param and 'disk_radius' in model_param:
             disk_param = {'teff': model_param['disk_teff'],
@@ -684,25 +696,84 @@ class ReadModel:
 
             flux += spectres.spectres(self.wl_points, planck_box.wavelength, planck_box.flux)
 
+        # Create ModelBox with the spectrum
+
+        model_box = box.create_box(boxtype='model',
+                                   model=self.model,
+                                   wavelength=self.wl_points,
+                                   flux=flux,
+                                   parameters=model_param,
+                                   quantity='flux')
+
+        # Apply veiling
+
+        if 'veil_a' in model_param and 'veil_b' in model_param and 'veil_ref' in model_param:
+            lambda_ref = 0.5  # (um)
+
+            veil_flux = model_param['veil_ref'] + \
+                model_param['veil_b']*(model_box.wavelength - lambda_ref)
+
+            model_box.flux = model_param['veil_a']*model_box.flux + veil_flux
+
+        # Apply extinction
+
+        if 'lognorm_radius' in model_param and 'lognorm_sigma' in model_param and \
+                'lognorm_ext' in model_param:
+
+            model_box.flux = self.apply_lognorm_ext(model_box.wavelength,
+                                                    model_box.flux,
+                                                    model_param['lognorm_radius'],
+                                                    model_param['lognorm_sigma'],
+                                                    model_param['lognorm_ext'])
+
+        if 'powerlaw_max' in model_param and 'powerlaw_exp' in model_param and \
+                'powerlaw_ext' in model_param:
+
+            model_box.flux = self.apply_powerlaw_ext(model_box.wavelength,
+                                                     model_box.flux,
+                                                     model_param['powerlaw_max'],
+                                                     model_param['powerlaw_exp'],
+                                                     model_param['powerlaw_ext'])
+
+        if 'ism_ext' in model_param:
+            ism_reddening = model_param.get('ism_red', 3.1)
+
+            model_box.flux = self.apply_ism_ext(model_box.wavelength,
+                                                model_box.flux,
+                                                model_param['ism_ext'],
+                                                ism_reddening)
+
+        if 'powerl_ext' in model_param and 'powerl_exp' in model_param:
+
+            model_box.flux = self.apply_ext_powerlaw(model_box.wavelength,
+                                                     model_box.flux,
+                                                     model_param['powerl_ext'],
+                                                     model_param['powerl_exp'])
+
+        # Smooth the spectrum
+
         if smooth and spec_res is not None:
-            flux = read_util.smooth_spectrum(wavelength=self.wl_points,
-                                             flux=flux,
-                                             spec_res=spec_res)
+            model_box.flux = read_util.smooth_spectrum(
+                model_box.wavelength, model_box.flux, spec_res)
 
         elif smooth and spec_res is None:
             warnings.warn('Smoothing of a spectrum (smooth=True) is only possible when setting '
                           'the argument of \'spec_res\'.')
 
+        # Resample the spectrum
+
         if wavel_resample is not None:
-            flux = spectres.spectres(wavel_resample,
-                                     self.wl_points,
-                                     flux,
-                                     spec_errs=None,
-                                     fill=np.nan,
-                                     verbose=True)
+            model_box.flux = spectres.spectres(wavel_resample,
+                                               model_box.wavelength,
+                                               model_box.flux,
+                                               spec_errs=None,
+                                               fill=np.nan,
+                                               verbose=True)
+
+            model_box.wavelength = wavel_resample
 
         elif spec_res is not None and not smooth:
-            index = np.where(np.isnan(flux))[0]
+            index = np.where(np.isnan(model_box.flux))[0]
 
             if index.size > 0:
                 raise ValueError('Flux values should not contains NaNs. Please make sure that '
@@ -717,16 +788,18 @@ class ReadModel:
 
             wavel_resample = wavel_resample[indices]
 
-            flux = spectres.spectres(wavel_resample,
-                                     self.wl_points,
-                                     flux,
-                                     spec_errs=None,
-                                     fill=np.nan,
-                                     verbose=True)
+            model_box.flux = spectres.spectres(wavel_resample,
+                                               model_box.wavelength,
+                                               model_box.flux,
+                                               spec_errs=None,
+                                               fill=np.nan,
+                                               verbose=True)
+
+            model_box.wavelength = wavel_resample
+
+        # Convert flux to magnitude
 
         if magnitude:
-            quantity = 'magnitude'
-
             with h5py.File(self.database, 'r') as h5_file:
                 try:
                     h5_file['spectra/calibration/vega']
@@ -740,113 +813,50 @@ class ReadModel:
             readcalib = read_calibration.ReadCalibration('vega', filter_name=None)
             calibbox = readcalib.get_spectrum()
 
-            if wavel_resample is not None:
-                new_spec_wavs = wavel_resample
-            else:
-                new_spec_wavs = self.wl_points
-
-            flux_vega, _ = spectres.spectres(new_spec_wavs,
+            flux_vega, _ = spectres.spectres(model_box.wavelength,
                                              calibbox.wavelength,
                                              calibbox.flux,
                                              spec_errs=calibbox.error,
                                              fill=np.nan,
                                              verbose=True)
 
-            flux = -2.5*np.log10(flux/flux_vega)
+            model_box.flux = -2.5*np.log10(model_box.flux/flux_vega)
+            model_box.quantity = 'magnitude'
 
-        else:
-            quantity = 'flux'
+        # Check if the contains NaNs
 
-        if np.isnan(np.sum(flux)):
-            warnings.warn(f'The resampled spectrum contains {np.sum(np.isnan(flux))} NaNs, '
-                          f'probably because the original wavelength range does not fully '
+        if np.isnan(np.sum(model_box.flux)):
+            warnings.warn(f'The resampled spectrum contains {np.sum(np.isnan(model_box.flux))} '
+                          f'NaNs, probably because the original wavelength range does not fully '
                           f'encompass the new wavelength range. The happened with the '
                           f'following parameters: {model_param}.')
 
-        if wavel_resample is None:
-            wavelength = self.wl_points
-        else:
-            wavelength = wavel_resample
-
-        # is_finite = np.where(np.isfinite(flux))[0]
-        #
-        # if wavel_resample is None:
-        #     wavelength = self.wl_points[is_finite]
-        # else:
-        #     wavelength = wavel_resample[is_finite]
-        #
-        # if wavelength.shape[0] == 0:
-        #     raise ValueError(f'The model spectrum is empty. Perhaps the grid could not be '
-        #                      f'interpolated at {model_param} because zeros are stored in the '
-        #                      f'database.')
-
-        model_box = box.create_box(boxtype='model',
-                                   model=self.model,
-                                   wavelength=wavelength,
-                                   flux=flux,
-                                   parameters=model_param,
-                                   quantity=quantity)
-
-        if 'veil_a' in model_param and 'veil_b' in model_param and 'veil_ref' in model_param:
-            lambda_ref = 0.5  # (um)
-
-            veil_flux = model_param['veil_ref'] + \
-                model_param['veil_b']*(model_box.wavelength - lambda_ref)
-
-            model_box.flux = model_param['veil_a']*model_box.flux + veil_flux
-
-        if 'lognorm_radius' in model_param and 'lognorm_sigma' in model_param and \
-                'lognorm_ext' in model_param:
-
-            model_box.flux = self.apply_ext_lnorm_distr(model_box.wavelength,
-                                                        model_box.flux,
-                                                        model_param['lognorm_radius'],
-                                                        model_param['lognorm_sigma'],
-                                                        model_param['lognorm_ext'])
-
-        if 'powerlaw_max' in model_param and 'powerlaw_exp' in model_param and \
-                'powerlaw_ext' in model_param:
-
-            model_box.flux = self.apply_ext_plaw_distr(model_box.wavelength,
-                                                       model_box.flux,
-                                                       model_param['powerlaw_max'],
-                                                       model_param['powerlaw_exp'],
-                                                       model_param['powerlaw_ext'])
-
-        if 'ism_ext' in model_param:
-
-            if 'ism_red' in model_param:
-                ism_reddening = model_param['ism_red']
-            else:
-                ism_reddening = 3.1
-
-            model_box.flux = self.apply_ext_ism(model_box.wavelength,
-                                                model_box.flux,
-                                                model_param['ism_ext'],
-                                                ism_reddening)
-
-        if 'powerl_ext' in model_param and 'powerl_exp' in model_param:
-
-            model_box.flux = self.apply_ext_powerlaw(model_box.wavelength,
-                                                     model_box.flux,
-                                                     model_param['powerl_ext'],
-                                                     model_param['powerl_exp'])
+        # Add the luminosity to the parameter dictionary
 
         if 'radius' in model_box.parameters:
             model_box.parameters['luminosity'] = 4. * np.pi * (
                 model_box.parameters['radius'] * constants.R_JUP)**2 * constants.SIGMA_SB * \
                 model_box.parameters['teff']**4. / constants.L_SUN  # (Lsun)
 
+        # Add the blackbody disk component to the luminosity
+
         if 'disk_teff' in model_box.parameters and 'disk_radius' in model_box.parameters:
             model_box.parameters['luminosity'] += 4. * np.pi * (
                 model_box.parameters['disk_radius'] * constants.R_JUP)**2 * constants.SIGMA_SB * \
                 model_box.parameters['disk_teff']**4. / constants.L_SUN  # (Lsun)
 
+        # Add the planet mass to the parameter dictionary
+
+        if 'radius' in model_param and 'logg' in model_param:
+            model_param['mass'] = read_util.get_mass(model_param['logg'], model_param['radius'])
+
         return model_box
 
     @typechecked
     def get_data(self,
-                 model_param: Dict[str, float]) -> box.ModelBox:
+                 model_param: Dict[str, float],
+                 spec_res: Optional[float] = None,
+                 wavel_resample: Optional[np.ndarray] = None) -> box.ModelBox:
         """
         Function for selecting a model spectrum (without interpolation) for a set of parameter
         values that coincide with the grid points. The stored grid points can be inspected with
@@ -857,6 +867,13 @@ class ReadModel:
         model_param : dict
             Model parameters and values. Only discrete values from the original grid are possible.
             Else, the nearest grid values are selected.
+        spec_res : float, None
+            Spectral resolution that is used for smoothing the spectrum with a Gaussian kernel. No
+            smoothing is applied to the spectrum if the argument is set to ``None``.
+        wavel_resample : np.ndarray, None
+            Wavelength points (um) to which the spectrum will be resampled. In that case,
+            ``spec_res`` can still be used for smoothing the spectrum with a Gaussian kernel. The
+            original wavelength points are used if the argument is set to ``None``.
 
         Returns
         -------
@@ -864,20 +881,26 @@ class ReadModel:
             Box with the model spectrum.
         """
 
+        # Check if all parameters are present
+
         for key in self.get_parameters():
             if key not in model_param.keys():
                 raise ValueError(f'The \'{key}\' parameter is required by \'{self.model}\'. '
                                  f'The mandatory parameters are {self.get_parameters()}.')
 
-        extra_param = ['radius', 'distance', 'mass', 'luminosity']
+        # Print a warning if redundant parameters are included in the dictionary
 
         for key in model_param.keys():
-            if key not in self.get_parameters() and key not in extra_param:
+            if key not in self.get_parameters() and key not in self.extra_param:
                 warnings.warn(f'The \'{key}\' parameter is not required by \'{self.model}\' so '
                               f'the parameter will be ignored. The mandatory parameters are '
                               f'{self.get_parameters()}.')
 
+        # Open de HDF5 database
+
         h5_file = self.open_database()
+
+        # Create lists with the parameter names and values
 
         param_key = []
         param_val = []
@@ -902,7 +925,11 @@ class ReadModel:
             param_key.append('fsed')
             param_val.append(model_param['fsed'])
 
+        # Read the grid of fluxes from the database
+
         flux = np.asarray(h5_file[f'models/{self.model}/flux'])
+
+        # Find the indices of the grid points for which the spectrum will be extracted
 
         indices = []
 
@@ -915,11 +942,23 @@ class ReadModel:
 
             indices.append(data_index[0])
 
+        # Read the wavelength grid and the indices that will be used for the wavelength range
+
         wl_points, wl_index = self.wavelength_points(h5_file)
+
+        # Append the wavelength indices to the list of grid indices
 
         indices.append(wl_index)
 
+        # Extract the spectrum at the requested grid point and wavelength range
+
         flux = flux[tuple(indices)]
+
+        # Close the HDF5 database
+
+        h5_file.close()
+
+        # Apply (radius/distance)^2 scaling
 
         if 'radius' in model_param and 'distance' in model_param:
             scaling = (model_param['radius']*constants.R_JUP)**2 / \
@@ -927,7 +966,7 @@ class ReadModel:
 
             flux *= scaling
 
-        h5_file.close()
+        # Create ModelBox with the spectrum
 
         model_box = box.create_box(boxtype='model',
                                    model=self.model,
@@ -935,6 +974,8 @@ class ReadModel:
                                    flux=flux,
                                    parameters=model_param,
                                    quantity='flux')
+
+        # Apply extinction
 
         if 'lognorm_radius' in model_param and 'lognorm_sigma' in model_param and \
                 'lognorm_ext' in model_param:
@@ -955,11 +996,7 @@ class ReadModel:
                                                        model_param['powerlaw_ext'])
 
         if 'ism_ext' in model_param:
-
-            if 'ism_red' in model_param:
-                ism_reddening = model_param['ism_red']
-            else:
-                ism_reddening = 3.1
+            ism_reddening = model_param.get('ism_red', 3.1)
 
             model_box.flux = self.apply_ext_ism(model_box.wavelength,
                                                 model_box.flux,
@@ -973,15 +1010,37 @@ class ReadModel:
                                                      model_param['powerl_ext'],
                                                      model_param['powerl_exp'])
 
+        # Smooth the spectrum
+
+        if spec_res is not None:
+            model_box.flux = read_util.smooth_spectrum(
+                model_box.wavelength, model_box.flux, spec_res)
+
+        # Resample the spectrum
+
+        if wavel_resample is not None:
+            model_box.flux = spectres.spectres(wavel_resample,
+                                               model_box.wavelength,
+                                               model_box.flux,
+                                               spec_errs=None,
+                                               fill=np.nan,
+                                               verbose=True)
+
+            model_box.wavelength = wavel_resample
+
+        # Add the luminosity to the parameter dictionary
+
         if 'radius' in model_box.parameters:
             model_box.parameters['luminosity'] = 4. * np.pi * (
                 model_box.parameters['radius'] * constants.R_JUP)**2 * constants.SIGMA_SB * \
                 model_box.parameters['teff']**4. / constants.L_SUN  # (Lsun)
 
-        if 'disk_teff' in model_box.parameters and 'disk_radius' in model_box.parameters:
-            model_box.parameters['luminosity'] += 4. * np.pi * (
-                model_box.parameters['disk_radius'] * constants.R_JUP)**2 * constants.SIGMA_SB * \
-                model_box.parameters['disk_teff']**4. / constants.L_SUN  # (Lsun)
+        # Add the blackbody disk component to the luminosity
+
+        # if 'disk_teff' in model_box.parameters and 'disk_radius' in model_box.parameters:
+        #     model_box.parameters['luminosity'] += 4. * np.pi * (
+        #         model_box.parameters['disk_radius'] * constants.R_JUP)**2 * constants.SIGMA_SB * \
+        #         model_box.parameters['disk_teff']**4. / constants.L_SUN  # (Lsun)
 
         return model_box
 
@@ -1024,22 +1083,25 @@ class ReadModel:
 
     @typechecked
     def get_magnitude(self,
-                      model_param: Dict[str, float]) -> Tuple[float, Optional[float]]:
+                      model_param: Dict[str, float]) -> Tuple[Optional[float], Optional[float]]:
         """
         Function for calculating the apparent and absolute magnitudes for the ``filter_name``.
 
         Parameters
         ----------
         model_param : dict
-            Model parameters and values.
+            Dictionary with the model parameters. A ``radius`` (Rjup) and ``distance`` (pc)
+            are required for the apparent magnitude (i.e. to scale the flux from the planet to the
+            observer). Only a ``radius`` is required for the absolute magnitude.
 
         Returns
         -------
         float
-            Apparent magnitude.
+            Apparent magnitude. A ``None`` is returned if the dictionary of ``model_param`` does
+            not contain a ``radius`` and ``distance``.
         float, None
-            Absolute magnitude. A ``None`` is returned if the ``model_param`` do not contain a
-            ``radius`` and ``distance``.
+            Absolute magnitude. A ``None`` is returned if the dictionary of ``model_param`` does
+            not contain a ``radius``.
         """
 
         for key in self.get_parameters():
@@ -1060,19 +1122,28 @@ class ReadModel:
             return np.nan, np.nan
 
         if spectrum.wavelength.size == 0:
-            app_mag = np.nan
-            abs_mag = np.nan
+            app_mag = (np.nan, None)
+            abs_mag = (np.nan, None)
 
         else:
             synphot = photometry.SyntheticPhotometry(self.filter_name)
 
-            if 'distance' in model_param:
+            if 'radius' in model_param and 'distance' in model_param:
                 app_mag, abs_mag = synphot.spectrum_to_magnitude(
                     spectrum.wavelength, spectrum.flux, distance=(model_param['distance'], None))
 
             else:
-                app_mag, abs_mag = synphot.spectrum_to_magnitude(
-                    spectrum.wavelength, spectrum.flux, distance=None)
+                app_mag = (None, None)
+                abs_mag = (None, None)
+
+                if 'radius' in model_param:
+                    distance = 10.  # (pc)
+
+                    spectrum.flux *= (model_param['radius']*constants.R_JUP)**2
+                    spectrum.flux /= (distance*constants.PARSEC)**2
+
+                    _, abs_mag = synphot.spectrum_to_magnitude(
+                        spectrum.wavelength, spectrum.flux, distance=(distance, None))
 
         return app_mag[0], abs_mag[0]
 
@@ -1281,3 +1352,24 @@ class ReadModel:
         h5_file.close()
 
         return param
+
+    @typechecked
+    def get_spec_res(self) -> float:
+        """
+        Function for extracting the spectral resolution as stored in the database.
+
+        Returns
+        -------
+        float
+            Spectral resolution.
+        """
+
+        wavel_points = self.get_wavelengths()
+
+        wavel_mean = (wavel_points[1:]+wavel_points[:-1])/2.
+
+        # R = lambda / delta_lambda / 2, because twice as many points as R are
+        # required to resolve two features that are lambda / R apart
+        spec_res = wavel_mean / np.diff(wavel_points) / 2.
+
+        return np.mean(spec_res)

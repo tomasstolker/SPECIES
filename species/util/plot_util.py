@@ -296,55 +296,71 @@ def update_labels(param: List[str]) -> List[str]:
 
     if 'log_powerlaw_a' in param:
         index = param.index('log_powerlaw_a')
-        param[index] = r'$a_\mathregular{powerlaw}$'
+        param[index] = r'a$_\mathregular{powerlaw}$'
 
     if 'log_powerlaw_b' in param:
         index = param.index('log_powerlaw_b')
-        param[index] = r'$b_\mathregular{powerlaw}$'
+        param[index] = r'b$_\mathregular{powerlaw}$'
 
     if 'log_powerlaw_c' in param:
         index = param.index('log_powerlaw_c')
-        param[index] = r'$c_\mathregular{powerlaw}$'
+        param[index] = r'c$_\mathregular{powerlaw}$'
 
     if 'veil_a' in param:
         index = param.index('veil_a')
-        param[index] = r'$a_\mathregular{veil}$'
+        param[index] = r'a$_\mathregular{veil}$'
 
     if 'veil_b' in param:
         index = param.index('veil_b')
-        param[index] = r'$b_\mathregular{veil}$'
+        param[index] = r'b$_\mathregular{veil}$'
 
     if 'veil_ref' in param:
         index = param.index('veil_ref')
-        param[index] = r'$F_\mathregular{ref, veil}$'
+        param[index] = r'F$_\mathregular{ref, veil}$'
 
     if 'gauss_amplitude' in param:
         index = param.index('gauss_amplitude')
-        param[index] = r'$a$ (W m$^{-2}$ µm$^{-1}$)'
+        param[index] = r'a (W m$^{-2}$ µm$^{-1}$)'
 
     if 'gauss_mean' in param:
         index = param.index('gauss_mean')
-        param[index] = r'$\mu$ (nm)'
+        param[index] = r'$\lambda$ (nm)'
 
     if 'gauss_sigma' in param:
         index = param.index('gauss_sigma')
         param[index] = r'$\sigma$ (nm)'
 
+    if 'gauss_amplitude_2' in param:
+        index = param.index('gauss_amplitude_2')
+        param[index] = r'a$_2$ (W m$^{-2}$ µm$^{-1}$)'
+
+    if 'gauss_mean_2' in param:
+        index = param.index('gauss_mean_2')
+        param[index] = r'$\lambda_2$ (nm)'
+
+    if 'gauss_sigma_2' in param:
+        index = param.index('gauss_sigma_2')
+        param[index] = r'$\sigma_2$ (nm)'
+
     if 'gauss_fwhm' in param:
         index = param.index('gauss_fwhm')
-        param[index] = r'$v$ (km s$^{-1}$)'
+        param[index] = r'FWHM (km s$^{-1}$)'
 
     if 'line_flux' in param:
         index = param.index('line_flux')
-        param[index] = r'$F_\mathregular{line}$ (W m$^{-2}$)'
+        param[index] = r'F$_\mathregular{line}$ (W m$^{-2}$)'
 
     if 'line_luminosity' in param:
         index = param.index('line_luminosity')
-        param[index] = r'$L_\mathregular{line}$ (L$_\mathregular{\odot}$)'
+        param[index] = r'L$_\mathregular{line}$ (L$_\mathregular{\odot}$)'
 
     if 'line_eq_width' in param:
         index = param.index('line_eq_width')
         param[index] = r'EW ($\AA$)'
+
+    if 'line_vrad' in param:
+        index = param.index('line_vrad')
+        param[index] = r'v$_\mathregular{r}$ (km s$^{-1}$)'
 
     return param
 

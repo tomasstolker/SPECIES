@@ -12,10 +12,10 @@ species.plot.plot\_color module
    :undoc-members:
    :show-inheritance:
 
-species.plot.plot\_empirical module
------------------------------------
+species.plot.plot\_comparison module
+------------------------------------
 
-.. automodule:: species.plot.plot_empirical
+.. automodule:: species.plot.plot_comparison
    :members:
    :undoc-members:
    :show-inheritance:

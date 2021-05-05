@@ -17,6 +17,7 @@ from scipy.interpolate import interp1d
 from typeguard import typechecked
 
 from species.core import box
+from species.data import companions
 from species.read import read_object
 from species.util import dust_util, plot_util
 
@@ -29,6 +30,7 @@ def plot_color_magnitude(boxes: list,
                          mass_labels: Optional[Union[List[float], List[Tuple[float, str]]]] = None,
                          teff_labels: Optional[Union[List[float], List[Tuple[float, str]]]] = None,
                          companion_labels: bool = False,
+                         accretion: bool = False,
                          reddening: Optional[List[Tuple[Tuple[str, str], Tuple[str, float], str,
                                                         float, Tuple[float, float]]]] = None,
                          field_range: Optional[Tuple[str, str]] = None,
@@ -69,6 +71,10 @@ def plot_color_magnitude(boxes: list,
         to None.
     companion_labels : bool
         Plot labels with the names of the directly imaged companions.
+    accretion : bool
+        Plot accreting, directly imaged objects with a different symbol than the regular, directly
+        imaged objects. The object names from ``objects`` will be compared with the data from
+        :func:`~species.data.companions.get_data` to check if a companion is accreting or not.
     reddening : list(tuple(tuple(str, str), tuple(str, float), str, float, tuple(float, float)), None
         Include reddening arrows by providing a list with tuples. Each tuple contains the filter
         names for the color, the filter name and value of the magnitude, the particle radius (um),
@@ -453,6 +459,8 @@ def plot_color_magnitude(boxes: list,
             colorerr = math.sqrt(objcolor1[1]**2+objcolor2[1]**2)
             x_color = objcolor1[0]-objcolor2[0]
 
+            companion_data = companions.get_data()
+
             if len(item) > 4 and item[4] is not None:
                 kwargs = item[4]
 
@@ -463,6 +471,11 @@ def plot_color_magnitude(boxes: list,
                           'mfc': 'white',
                           'mec': 'black',
                           'label': 'Direct imaging'}
+
+                if accretion and item[0] in companion_data and companion_data[item[0]]['accretion']:
+                    kwargs['marker'] = 'X'
+                    kwargs['ms'] = 7.
+                    kwargs['label'] = 'Accreting'
 
             ax1.errorbar(x_color, abs_mag, yerr=abs_err, xerr=colorerr, zorder=3, **kwargs)
 

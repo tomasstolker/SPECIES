@@ -4,18 +4,18 @@ species.analysis package
 Submodules
 ----------
 
-species.analysis.emission\_line module
---------------------------------------
+species.analysis.compare\_spectra module
+----------------------------------------
 
-.. automodule:: species.analysis.emission_line
+.. automodule:: species.analysis.compare_spectra
    :members:
    :undoc-members:
    :show-inheritance:
 
-species.analysis.empirical module
----------------------------------
+species.analysis.emission\_line module
+--------------------------------------
 
-.. automodule:: species.analysis.empirical
+.. automodule:: species.analysis.emission_line
    :members:
    :undoc-members:
    :show-inheritance:
