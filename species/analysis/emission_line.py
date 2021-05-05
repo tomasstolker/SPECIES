@@ -96,7 +96,8 @@ class EmissionLine:
     @typechecked
     def subtract_continuum(self,
                            poly_degree: int = 3,
-                           plot_filename: str = 'continuum.pdf') -> None:
+                           plot_filename: str = 'continuum.pdf',
+                           spec_filename: Optional[str] = None) -> None:
         """
         Method for fitting the continuum with a polynomial function of the following form:
         :math:`P = \\sum_{i=0}^{i=n}C_{i} * x^{i}`. The spectrum is first smoothed with a median
@@ -108,6 +109,9 @@ class EmissionLine:
             Degree of the polynomial series.
         plot_filename : str
             Filename for the plots with the continuum fit and the continuum-subtracted spectrum.
+        spec_filename : str, None
+            Output text file for writing the continuum-subtracted spectrum. The file will not be
+            created if the argument is set to ``None``.
 
         Returns
         -------
@@ -221,6 +225,12 @@ class EmissionLine:
         self.spectrum[:, 1] = spec_cont_sub.flux
 
         self.continuum_check = True
+
+        if spec_filename is not None:
+            print(f'Writing continuum-subtracted spectrum: {spec_filename}...', end='', flush=True)
+            header = 'Wavelength (um) - Flux (W m-2 um-1) - Error (W m-2 um-1)'
+            np.savetxt(spec_filename, self.spectrum, header=header)
+            print(' [DONE]')
 
     @typechecked
     def integrate_flux(self,
