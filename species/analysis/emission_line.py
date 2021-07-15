@@ -4,13 +4,19 @@ Module with functionalities for the analysis of emission lines.
 
 import configparser
 import os
+import warnings
 
 from typing import Dict, Optional, Tuple, Union
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
-import ultranest
+
+try:
+    import ultranest
+except:
+    warnings.warn('UltraNest could not be imported. '
+                  'Perhaps because cython was not correctly compiled?')
 
 from astropy import units as u
 from astropy.modeling.fitting import LinearLSQFitter

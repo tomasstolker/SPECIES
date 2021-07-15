@@ -18,7 +18,7 @@ from typeguard import typechecked
 
 from species.core import constants
 from species.read import read_object
-from species.util import dust_util, read_util, plot_util
+from species.util import dust_util, read_util
 
 
 @typechecked
@@ -353,8 +353,8 @@ def plot_grid_statistic(tag: str,
     read_obj = read_object.ReadObject(dset.attrs['object_name'])
 
     n_wavel = 0
-    for key, value in read_obj.get_spectrum().items():
-        n_wavel += value[0].shape[0]
+    for item in read_obj.get_spectrum().values():
+        n_wavel += item[0].shape[0]
 
     goodness_fit = np.array(dset)
 
@@ -389,8 +389,8 @@ def plot_grid_statistic(tag: str,
     ax.xaxis.set_minor_locator(AutoMinorLocator(5))
     ax.yaxis.set_minor_locator(AutoMinorLocator(5))
 
-    ax.set_xlabel(r'T$_\mathrm{eff}$ (K)', fontsize=13.)
-    ax.set_ylabel(r'$\mathregular{log}\,g$', fontsize=13.)
+    ax.set_xlabel(r'T$_\mathregular{eff}$ (K)', fontsize=13.)
+    ax.set_ylabel(r'$\mathregular{log}\,\mathregular{g}$', fontsize=13.)
 
     if xlim is not None:
         ax.set_xlim(xlim[0], xlim[1])
@@ -436,14 +436,16 @@ def plot_grid_statistic(tag: str,
     x_grid, y_grid = np.meshgrid(x_new, y_new)
 
     goodness_fit = fit_interp((y_grid, x_grid))
+    goodness_fit = np.log10(goodness_fit)
+    goodness_fit -= np.amin(goodness_fit)
 
-    c = ax.contourf(x_grid, y_grid, np.log10(goodness_fit))
+    c = ax.contourf(x_grid, y_grid, goodness_fit)
 
     cb = mpl.colorbar.Colorbar(ax=ax_cb, mappable=c, orientation='vertical',
                                ticklocation='right', format='%.1f')
 
     cb.ax.tick_params(width=0.8, length=5, labelsize=12, direction='in', color='black')
-    cb.ax.set_ylabel(r'$\mathregular{log}\,G_k$', rotation=270, labelpad=22, fontsize=13.)
+    cb.ax.set_ylabel(r'$\Delta\mathregular{log}\,\mathregular{G}_\mathregular{k}$', rotation=270, labelpad=22, fontsize=13.)
 
     if len(coord_points[2]) != 1:
         extra_interp = RegularGridInterpolator((coord_points[1], coord_points[0]), extra_map)

@@ -4,6 +4,7 @@ Module with functionalities for reading and writing of data.
 
 import configparser
 import os
+import json
 import warnings
 
 from typing import Dict, List, Optional, Tuple, Union
@@ -103,6 +104,8 @@ class Database:
             None
         """
 
+        spec_data = companions.get_spec_data()
+
         for planet_name, planet_dict in companions.get_data().items():
             distance = planet_dict['distance']
             app_mag = planet_dict['app_mag']
@@ -112,6 +115,10 @@ class Database:
 
             for mag_name, mag_dict in app_mag.items():
                 print(f'{mag_name} (mag) = {mag_dict[0]} +/- {mag_dict[1]}')
+
+            if planet_name in spec_data:
+                for key, value in spec_data[planet_name].items():
+                    print(f'{key} spectrum from {value[3]}')
 
             print()
 
@@ -145,8 +152,9 @@ class Database:
     def add_companion(self,
                       name: Union[Optional[str], Optional[List[str]]] = None) -> None:
         """
-        Function for adding the magnitudes of directly imaged planets and brown dwarfs from
-        :class:`~species.data.companions.get_data` to the database.
+        Function for adding the magnitudes and spectra of directly imaged planets and brown dwarfs
+        from :class:`~species.data.companions.get_data` and
+        :class:`~species.data.companions.get_comp_spec`to the database.
 
         Parameters
         ----------
@@ -170,9 +178,12 @@ class Database:
             name = data.keys()
 
         for item in name:
+            spec_dict = companions.companion_spectra(self.input_path, item)
+
             self.add_object(object_name=item,
                             distance=data[item]['distance'],
-                            app_mag=data[item]['app_mag'])
+                            app_mag=data[item]['app_mag'],
+                            spectrum=spec_dict)
 
     @typechecked
     def add_dust(self) -> None:
@@ -886,8 +897,8 @@ class Database:
                 print(f'      - Filename: {value[0]}')
                 print(f'      - Data shape: {read_spec[key].shape}')
                 print(f'      - Wavelength range (um): {wavelength[0]:.2f} - {wavelength[-1]:.2f}')
-                print(f'      - Mean flux (W m-2 um-1): {np.mean(flux):.2e}')
-                print(f'      - Mean error (W m-2 um-1): {np.mean(error):.2e}')
+                print(f'      - Mean flux (W m-2 um-1): {np.nanmean(flux):.2e}')
+                print(f'      - Mean error (W m-2 um-1): {np.nanmean(error):.2e}')
 
                 if isinstance(deredden, float):
                     print(f'      - Dereddening A_V: {deredden}')
@@ -920,7 +931,7 @@ class Database:
                             for i, hdu_item in enumerate(hdulist):
                                 data = np.asarray(hdu_item.data)
 
-                                corr_warn = f'The covariance matrix from {value[1]} contains ' \
+                                corr_warn = f'The matrix from {value[1]} contains ' \
                                             f'ones along the diagonal. Converting this ' \
                                             f'correlation matrix into a covariance matrix.'
 
@@ -957,7 +968,7 @@ class Database:
                     print('   - Covariance matrix:')
 
                     if np.all(np.diag(data) == 1.):
-                        warnings.warn(f'The covariance matrix from {value[1]} contains ones on '
+                        warnings.warn(f'The matrix from {value[1]} contains ones on '
                                       f'the diagonal. Converting this correlation matrix into a '
                                       f'covariance matrix.')
 
@@ -1448,7 +1459,8 @@ class Database:
             model_param['distance'] = dset.attrs['distance']
 
             if n_spec_name == 1:
-                model_param['radius'] = dset.attrs[f'radius_{item}']
+                spec_name = dset.attrs['spec_name0']
+                model_param['radius'] = dset.attrs[f'radius_{spec_name}']
 
             else:
                 if spec_fix is None:
@@ -1787,6 +1799,7 @@ class Database:
 
             magnitude = {}
             flux = {}
+            mean_wavel = {}
 
             for observatory in dset.keys():
                 if observatory not in ['distance', 'spectrum']:
@@ -1797,6 +1810,9 @@ class Database:
                             magnitude[name] = dset[name][0:2]
                             flux[name] = dset[name][2:4]
 
+                            filter_trans = read_filter.ReadFilter(name)
+                            mean_wavel[name] = filter_trans.mean_wavelength()
+
             phot_filters = list(magnitude.keys())
 
         else:
@@ -1804,6 +1820,7 @@ class Database:
             magnitude = None
             flux = None
             phot_filters = None
+            mean_wavel = None
 
         if inc_spec and f'objects/{object_name}/spectrum' in h5_file:
             spectrum = {}
@@ -1835,6 +1852,7 @@ class Database:
         return box.create_box('object',
                               name=object_name,
                               filters=phot_filters,
+                              mean_wavel=mean_wavel,
                               magnitude=magnitude,
                               flux=flux,
                               distance=distance,
@@ -1845,7 +1863,7 @@ class Database:
                     tag: str,
                     burnin: Optional[int] = None,
                     random: Optional[int] = None,
-                    out_file: Optional[str] = None) -> box.SamplesBox:
+                    json_file: Optional[str] = None) -> box.SamplesBox:
         """
         Parameters
         ----------
@@ -1858,10 +1876,9 @@ class Database:
         random : int, None
             Number of random samples to select. All samples (with the burnin excluded) are
             selected if set to ``None``.
-        out_file : str, None
-            Output file to store the posterior samples. The data will be stored in a FITS file if
-            the argument of ``out_file`` ends with `.fits`. Otherwise, the data will be written to
-            a text file. The data will not be written to a file if the argument is set to ``None``.
+        json_file : str, None
+            JSON file to store the posterior samples. The data will not be written if the argument
+            is set to ``None``.
 
         Returns
         -------
@@ -1916,18 +1933,14 @@ class Database:
 
         median_sample = self.get_median_sample(tag, burnin)
 
-        if out_file is not None:
-            header = ''
+        if json_file is not None:
+            samples_dict = {}
+
             for i, item in enumerate(param):
-                header += f'{item}'
-                if i != len(param) - 1:
-                    header += ' - '
+                samples_dict[item] = list(samples[:, i])
 
-            if out_file.endswith('.fits'):
-                fits.writeto(out_file, samples, overwrite=True)
-
-            else:
-                np.savetxt(out_file, samples, header=header)
+            with open(json_file, 'w') as out_file:
+                json.dump(samples_dict, out_file, indent=4)
 
         return box.create_box('samples',
                               spectrum=spectrum,
@@ -2091,12 +2104,15 @@ class Database:
 
             # Indices of the best-fit model
             best_index = np.unravel_index(goodness_sum.argmin(), goodness_sum.shape)
+            dset.attrs['best_fit'] = goodness_sum[best_index]
 
             print('Best-fit parameters:')
+            print(f'   - Goodness-of-fit = {goodness_sum[best_index]:.2e}')
 
             for i, item in enumerate(model_param):
                 best_param = coord_points[i][best_index[i]]
                 dset.attrs[f'best_param{i}'] = best_param
+                print(f'   - {item} = {best_param}')
 
             for i, item in enumerate(spec_name):
                 scaling = flux_scaling[best_index[0], best_index[1], best_index[2], i]
@@ -2105,7 +2121,7 @@ class Database:
                 radius /= constants.R_JUP  # (Rjup)
 
                 dset.attrs[f'radius_{item}'] = radius
-                print(f' -   {item} radius (Rjup) = {radius:.2f}')
+                print(f'   - {item} radius (Rjup) = {radius:.2f}')
 
                 dset.attrs[f'scaling_{item}'] = scaling
-                print(f' -   {item} scaling = {scaling:.2e}')
+                print(f'   - {item} scaling = {scaling:.2e}')

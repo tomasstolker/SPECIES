@@ -2,7 +2,10 @@
 Module for extracting data of directly imaged planets and brown dwarfs.
 """
 
-from typing import Dict, List, Tuple, Union
+import os
+import urllib.request
+
+from typing import Dict, List, Optional, Tuple, Union
 
 from typeguard import typechecked
 
@@ -53,10 +56,10 @@ def get_data() -> Dict[str, Dict[str, Union[bool, Tuple[float, float],
                                         'Paranal/NACO.Lp': (15.33, 0.12),  # Stolker et al. 2020
                                         'Paranal/NACO.NB405': (15.23, 0.22),  # Stolker et al. 2020
                                         'Paranal/NACO.Mp': (14.65, 0.29)},  # Stolker et al. 2020
-                           'semi_major': (110., 45.),  # Cheetham et al. 2019
-                           'mass_star': (1.96, 0.04),  # Chauvin et al. 2017
-                           'mass_companion': (9.9, 1.8),  # Marleau et al. 2019
-                           'accretion': False},
+                            'semi_major': (110., 45.),  # Cheetham et al. 2019
+                            'mass_star': (1.96, 0.04),  # Chauvin et al. 2017
+                            'mass_companion': (9.9, 1.8),  # Marleau et al. 2019
+                            'accretion': False},
 
             '51 Eri b': {'distance': (29.78, 0.12),
                          'app_mag': {'MKO/NSFCam.J': (19.04, 0.40),  # Rajan et al. 2017
@@ -158,7 +161,9 @@ def get_data() -> Dict[str, Dict[str, Union[bool, Tuple[float, float],
                          'semi_major': (20.8, 0.7),  # Wang et al. 2021
                          'mass_star': (0.98, 0.07),  # Wang et al. 2021
                          'mass_companion': (3.2, 1.6),  # Wang et al. 2021
-                         'accretion': True},  # Haffert et al. 2019
+                         'accretion': True,  # Haffert et al. 2019
+                         'line_flux': {'h-alpha': (8.1e-19, 0.3e-19),  # Hashimoto et al. 2020
+                                       'h-beta': (2.3e-19, 2.3e-19)}},  # Hashimoto et al. 2020
 
             'PDS 70 c': {'distance': (113.43, 0.52),
                          'app_mag': {'Paranal/NACO.NB405': (14.91, 0.35),  # Stolker et al. 2020
@@ -179,7 +184,7 @@ def get_data() -> Dict[str, Dict[str, Union[bool, Tuple[float, float],
                                      'Paranal/NACO.Lp': (15.28, 0.14)},  # Chauvin et al. 2004
                          'semi_major': (46., 46.),  # Patience et al. 2010
                          'mass_star': (25.*constants.M_JUP/constants.M_SUN,
-                                          5.*constants.M_JUP/constants.M_SUN),  # Mohanty et al. 2007
+                                       5.*constants.M_JUP/constants.M_SUN),  # Mohanty et al. 2007
                          'mass_companion': (8., 2.),  # Mohanty et al. 2007
                          'accretion': False},
 
@@ -214,7 +219,8 @@ def get_data() -> Dict[str, Dict[str, Union[bool, Tuple[float, float],
                                             0.01*constants.M_SUN/constants.M_JUP),  # Kennedy et al. 2020
                          'accretion': False},
 
-            'GQ Lup B': {'distance': (151.82, 1.10),
+            'GQ Lup B': {'distance': (154.10, 0.69),  # Gaia Data Release 3
+                         'parallax': (6.49, 0.03),  # Gaia Data Release 3
                          'app_mag': {'HST/WFPC2-PC.F606W': (19.19, 0.07),  # Marois et al. 2007
                                      'HST/WFPC2-PC.F814W': (17.67, 0.05),  # Marois et al. 2007
                                      'HST/NICMOS2.F171M': (13.84, 0.13),  # Marois et al. 2007
@@ -223,6 +229,9 @@ def get_data() -> Dict[str, Dict[str, Union[bool, Tuple[float, float],
                                      'Magellan/VisAO.ip': (18.89, 0.24),  # Wu et al. 2017
                                      'Magellan/VisAO.zp': (16.40, 0.10),  # Wu et al. 2017
                                      'Magellan/VisAO.Ys': (15.88, 0.10),  # Wu et al. 2017
+                                     # 'MKO/NSFCam.H': (14.02, 0.13),  # Stolker et al. in prep.
+                                     'Paranal/NACO.NB405': (12.29, 0.07),  # Stolker et al. in prep.
+                                     'Paranal/NACO.Mp': (11.97, 0.08),  # Stolker et al. in prep.
                                      'Paranal/NACO.Ks': [(13.474, 0.031),  # Ginski et al. 2014
                                                          (13.386, 0.032),  # Ginski et al. 2014
                                                          (13.496, 0.050),  # Ginski et al. 2014
@@ -233,7 +242,10 @@ def get_data() -> Dict[str, Dict[str, Union[bool, Tuple[float, float],
                          'semi_major': (150., 50.),  # Schwarz et al. 2016
                          'mass_star': (1.03, 0.05),  # MacGregor et al. 2017
                          'mass_companion': (25., 15.),  # Wu et al. 2017
-                         'accretion': True},  # Seifahrt et al. 2007
+                         'radius_companion': (3.6, 0.1),  # Stolker et al. in prep.
+                         'accretion': True,  # Seifahrt et al. 2007
+                         'line_flux': {'h-alpha': (3.31e-18, 0.04e-18),  # Stolker et al. in prep.
+                                       'pa-beta': (1.32e-18, 0.01e-18)}},  # Stolker et al. in prep.
 
             'PZ Tel B': {'distance': (47.13, 0.13),
                          'app_mag': {'Paranal/SPHERE.ZIMPOL_R_PRIM': (17.84, 0.31),  # Maire et al. 2015
@@ -250,17 +262,18 @@ def get_data() -> Dict[str, Dict[str, Union[bool, Tuple[float, float],
                                      'Paranal/NACO.Mp': (10.93, 0.03),  # Stolker et al. 2020
                                      'Gemini/NICI.ED286': (11.68, 0.14),  # Biller et al. 2010
                                      'Gemini/NIRI.H2S1v2-1-G0220': (11.39, 0.14)},  # Biller et al. 2010
-                           'semi_major': (25., 25.),  # Maire et al. 2016
-                           'mass_star': (1.2, 1.2),  # Ginski et al. 2014
-                           'mass_companion': (55., 17.),  # Maire et al. 2016
-                           'accretion': False},
+                         'semi_major': (25., 25.),  # Maire et al. 2016
+                         'mass_star': (1.2, 1.2),  # Ginski et al. 2014
+                         'mass_companion': (55., 17.),  # Maire et al. 2016
+                         'accretion': False,
+                         'line_flux': {'h-alpha': (2.2e-18, 0.9e-18)}},  # Musso Barcucci et al. 2019
 
             'kappa And b': {'distance': (50.06, 0.87),
                             'app_mag': {'Subaru/CIAO.J': (15.86, 0.21),  # Bonnefoy et al. 2014
                                         'Subaru/CIAO.H': (14.95, 0.13),  # Bonnefoy et al. 2014
                                         'Subaru/CIAO.Ks': (14.32, 0.09),  # Bonnefoy et al. 2014
                                         'Keck/NIRC2.Lp': (13.12, 0.1),  # Bonnefoy et al. 2014
-                                        # 'Keck/NIRC2.NB_4.05': (13.0, 0.2),  # Bonnefoy et al. 2014
+                                        'Keck/NIRC2.NB_4.05': (13.0, 0.2),  # Bonnefoy et al. 2014
                                         'LBT/LMIRCam.M_77K': (13.3, 0.3)},  # Bonnefoy et al. 2014
                             'semi_major': (55., 55.),  # Bonnefoy et al. 2014
                             'mass_star': (2.7, 0.1),  # Jones et al. 2016
@@ -292,7 +305,7 @@ def get_data() -> Dict[str, Dict[str, Union[bool, Tuple[float, float],
                                        'Keck/NIRC2.H': (15.88, 0.05),  # Daemgen et al. 2017
                                        'Keck/NIRC2.Ks': (15.01, 0.06),  # Daemgen et al. 2017
                                        'Keck/NIRC2.Lp': (13.97, 0.06),  # Daemgen et al. 2017
-                                       # 'Keck/NIRC2.NB_4.05': (13.90, 0.08),  # Daemgen et al. 2017
+                                       'Keck/NIRC2.NB_4.05': (13.90, 0.08),  # Daemgen et al. 2017
                                        'Keck/NIRC2.Ms': (14.01, 0.23)},  # Daemgen et al. 2017
                            'semi_major': (157., 157.),  # Currie et al. 2014
                            'mass_star': (0.89, 0.08),  # Kraus et al. 2014
@@ -337,7 +350,9 @@ def get_data() -> Dict[str, Dict[str, Union[bool, Tuple[float, float],
                            'semi_major': (84., 84.),  # Delorme et al. 2013
                            'mass_star': (0.19, 0.02),  # Delorme et al. 2013
                            'mass_companion': (13., 1.),  # Delorme et al. 2013
-                           'accretion': True},  # Eriksson et al. 2020
+                           'accretion': True,  # Eriksson et al. 2020
+                           'line_flux': {'h-alpha': (12.80e-19, 0.70e-19),
+                                         'h-beta': (1.39e-19, 0.10e-19)}},  # Eriksson et al. 2020
 
             '1RXS 1609 B': {'distance': (139.67, 1.33),
                             'app_mag': {'Gemini/NIRI.J-G0202w': (17.90, 0.12),  # Lafreniere et al. 2008
@@ -358,7 +373,9 @@ def get_data() -> Dict[str, Dict[str, Union[bool, Tuple[float, float],
                             'semi_major': (320., 320.),  # Bowler et al. 2011
                             'mass_star': (0.9, 0.1),  # Bowler et al. 2011
                             'mass_companion': (14., 2.),  # Bowler et al. 2011
-                            'accretion': True},  # Bowler et al. 2011
+                            'accretion': True,  # Bowler et al. 2011
+                            'line_flux': {'h-alpha': (7.08e-19, 2.12e-18),  # Zhou et al. 2014
+                                          'pa-beta': (1.12e-18, 0.03e-18)}},  # Bowler et al. 2011
 
             'HD 72946 B': {'distance': (25.87, 0.03),
                            'app_mag': {'Paranal/SPHERE.IRDIS_D_H23_2': (14.56, 0.07),  # Maire et al. 2019
@@ -434,7 +451,9 @@ def get_data() -> Dict[str, Dict[str, Union[bool, Tuple[float, float],
                             'mass_star': (2.0, 0.3),  # Mendigutía et al. 2014
                             'mass_companion': (0.13*constants.M_SUN/constants.M_JUP,
                                                0.03*constants.M_SUN/constants.M_JUP),  # Lacour et al. 2016
-                            'accretion': True},  # Close et al. 2014
+                            'radius_companion': (19.1, 1.0),  # Christiaens et al. 2018
+                            'accretion': True,  # Close et al. 2014
+                            'line_flux': {'h-alpha': (7.6e-17, 3.5e-17)}},  # Cugno et al. 2019
 
             'CS Cha B': {'distance': (168.77, 1.92),
                          'app_mag': {'Paranal/SPHERE.IRDIS_B_J': (19.16, 0.21),  # Ginski et al. 2018
@@ -444,6 +463,143 @@ def get_data() -> Dict[str, Dict[str, Union[bool, Tuple[float, float],
                          'mass_star': (1.0, 0.1),  # Ginski et al. 2018
                          'mass_companion': (0.3*constants.M_SUN/constants.M_JUP,
                                             0.1*constants.M_SUN/constants.M_JUP),  # Haffert et al. 2020
-                         'accretion': True}}  # Haffert et al. 2020
+                         'accretion': True,  # Haffert et al. 2020
+                         'line_flux': {'h-alpha': (17.3e-20, 2.1e-20)}},  # Haffert et al. 2020
+
+            'CT Cha B': {'distance': (189.95, 0.42),
+                         'app_mag': {'Paranal/NACO.J': (16.61, 0.30),  # Schmidt et al. 2008
+                                     'Paranal/NACO.Ks': [(14.95, 0.30),  # Schmidt et al. 2008
+                                                         (14.89, 0.30)]},  # Schmidt et al. 2008
+                         'semi_major': (430., 0.),  # Wu et al. 2015
+                         'mass_star': (0.55, 0.),  # Hartmann et al. 1998
+                         'mass_companion': (19., 5.),  # Wu et al. 2015
+                         'accretion': True},  # Wu et al. 2015
+
+            'SR 12 C': {'distance': (125., 25.),  # Bouvier & Appenzeller 1992
+                        'app_mag': {'MKO/NSFCam.J': (15.93, 0.03),  # Kuzuhara et al. 2011
+                                    'MKO/NSFCam.H': (15.18, 0.03),  # Kuzuhara et al. 2011
+                                    'MKO/NSFCam.Ks': (14.57, 0.03),  # Kuzuhara et al. 2011
+                                    'MKO/NSFCam.Lp': (13.10, 0.08)},  # Kuzuhara et al. 2011
+                        'semi_major': (1100., 0.),  # Bowler et al. 2014
+                        'mass_star': (1.05, 0.05),  # Bowler et al. 2014
+                        'mass_companion': (13., 7.),  # Kuzuhara et al. 2011
+                        'accretion': True,  # Santamaría-Miranda et al. 2017
+                        'line_flux': {'h-alpha': (1.34e-18, 0.05e-18),  # Santamaría-Miranda et al. 2017 (erratum)
+                                      'h-beta': (2.19e-19, 0.03e-19)}},  # Santamaría-Miranda et al. 2017 (erratum)
+
+            'DH Tau B': {'distance': (133.45, 0.45),
+                         'app_mag': {'Subaru/CIAO.J': (15.71, 0.05),  # Itoh et al. 2005
+                                     'Subaru/CIAO.H': (14.96, 0.04),  # Itoh et al. 2005
+                                     'Subaru/CIAO.Ks': (14.19, 0.02)},  # Itoh et al. 2005
+                         'semi_major': (330., 0.),  # Patience et al. 2012
+                         'mass_star': (0.33, 0.),  # Patience et al. 2012
+                         'mass_companion': (11., 3.),  # Patience et al. 2012
+                         'accretion': True}}  # Zhou et al. 2014
 
     return data
+
+
+@typechecked
+def get_spec_data() -> Dict[str, Dict[str, Tuple[str, Optional[str], float, str]]]:
+    """
+    Function for extracting a dictionary with the spectra of directly imaged planets.
+
+    Returns
+    -------
+    dict
+        Dictionary with the spectrum, optional covariances, spectral resolution, and filename.
+    """
+
+    spec_data = {'beta Pic b': {'GPI_YJHK': ('betapicb_gpi_yjhk.dat',
+                                             None,
+                                             40.,
+                                             'Chilcote et al. 2017, AJ, 153, 182'),
+
+                                'GRAVITY': ('BetaPictorisb_2018-09-22.fits',
+                                            'BetaPictorisb_2018-09-22.fits',
+                                            500.,
+                                            'Gravity Collaboration et al. 2020, A&A, 633, 110')},
+
+                 '51 Eri b': {'SPHERE_YJH': ('51erib_sphere_yjh.dat',
+                                             None,
+                                             25.,
+                                             'Samland et al. 2017, A&A, 603, 57')},
+
+                 'HD 206893 B': {'SPHERE_YJH': ('hd206893b_sphere_yjh.dat',
+                                                None,
+                                                25.,
+                                                'Delorme et al. 2017, A&A, 608, 79')},
+
+                 'HIP 65426 B': {'SPHERE_YJH': ('hip65426b_sphere_yjh.dat',
+                                                None,
+                                                25.,
+                                                'Cheetham et al. 2019, A&A, 622, 80')},
+
+                 'HR 8799 e': {'SPHERE_YJH': ('hr8799e_sphere_yjh.dat',
+                                              None,
+                                              25.,
+                                              'Zurlo et al. 2016, A&A, 587, 57')},
+
+                 'PDS 70 b': {'SPHERE_YJH': ('pds70b_sphere_yjh.dat',
+                                             None,
+                                             25.,
+                                             'Müller et al. 2018, A&A, 617, 2')}}
+
+    return spec_data
+
+
+@typechecked
+def companion_spectra(input_path: str,
+                      comp_name: str) -> Optional[Dict[str, Tuple[str, Optional[str], float]]]:
+    """
+    Function for getting available spectra of directly imaged planets and brown dwarfs.
+
+    Parameters
+    ----------
+    input_path : str
+        Path of the data folder.
+    comp_name : str
+        Companion name for which the spectra will be returned.
+
+    Returns
+    -------
+    dict, None
+        Dictionary with the spectra of ``comp_name``. A ``None`` will be returned if there are not
+        any spectra available.
+    """
+
+    data_folder = os.path.join(input_path, 'companion_data/')
+
+    if not os.path.exists(data_folder):
+        os.makedirs(data_folder)
+
+    spec_data = get_spec_data()
+
+    if comp_name in spec_data:
+        spec_dict = {}
+
+        for key, value in spec_data[comp_name].items():
+            print(f'Getting {key} spectrum of {comp_name}...', end='', flush=True)
+
+            spec_url = f'https://home.strw.leidenuniv.nl/~stolker/species/spectra/{value[0]}'
+            spec_file = os.path.join(data_folder, value[0])
+
+            if value[1] is None:
+                cov_file = None
+            else:
+                cov_file = os.path.join(data_folder, value[1])
+
+            if not os.path.isfile(spec_file):
+                urllib.request.urlretrieve(spec_url, spec_file)
+
+            spec_dict[key] = (spec_file, cov_file, value[2])
+
+            print(' [DONE]')
+
+            print(f'IMPORTANT: Please cite {value[3]}')
+            print('           when making use of this spectrum in a publication')
+
+    else:
+        spec_dict = None
+
+    return spec_dict

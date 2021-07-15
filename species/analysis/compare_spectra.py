@@ -310,7 +310,7 @@ class CompareSpectra:
         """
         Method for finding the best fitting spectrum from a grid of atmospheric model spectra by
         evaluating the goodness-of-fit statistic from Cushing et al. (2008). Currently, this method
-        only supports model grids with only :math:`T_\mathrm{eff}` and :math:`\log(g)` as free
+        only supports model grids with only :math:`T_\\mathrm{eff}` and :math:`\\log(g)` as free
         parameters (e.g. BT-Settl). Please create an issue on Github if support for models with
         more than two parameters is required.
 

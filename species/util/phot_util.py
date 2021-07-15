@@ -255,9 +255,9 @@ def get_residuals(datatype: str,
                                                  verbose=True)
 
                 else:
-                    readmodel = read_model.ReadModel(spectrum, wavel_range=wavel_range)
+                    # Resampling to the new wavelength points is done by the get_model method
 
-                    # resampling to the new wavelength points is done in teh get_model function
+                    readmodel = read_model.ReadModel(spectrum, wavel_range=wavel_range)
 
                     model_spec = readmodel.get_model(parameters,
                                                      spec_res=objectbox.spectrum[key][3],

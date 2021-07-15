@@ -14,7 +14,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 from typeguard import typechecked
-from matplotlib.ticker import AutoMinorLocator, MultipleLocator
+from matplotlib.ticker import AutoMinorLocator, MultipleLocator, ScalarFormatter
 
 from species.core import box, constants
 from species.read import read_filter
@@ -89,7 +89,7 @@ def plot_spectrum(boxes: list,
         Alternatively, a list with two values can be provided to separate the model and data
         handles in two legends. Each of these two elements can be set to ``None``. For example,
         ``[None, {'loc': 'upper left', 'fontsize: 12.}]``, if only the data points should be
-        included in a legend.                  
+        included in a legend.
     figsize : tuple(float, float)
         Figure size.
     object_type : str
@@ -207,11 +207,13 @@ def plot_spectrum(boxes: list,
     # ax1.set_yticks([1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1e0])
     # ax3.set_yticks([-2., 0., 2.])
 
-    if filters is not None and scale[0] == 'linear':
-        ax2.xaxis.set_minor_locator(AutoMinorLocator(5))
+    if filters is not None:
+        if scale[0] == 'linear':
+            ax2.xaxis.set_minor_locator(AutoMinorLocator(5))
 
-    if residuals is not None and scale[0] == 'linear':
-        ax3.xaxis.set_minor_locator(AutoMinorLocator(5))
+    if residuals is not None:
+        if scale[0] == 'linear':
+            ax3.xaxis.set_minor_locator(AutoMinorLocator(5))
 
     if residuals is not None and filters is not None:
         ax1.set_xlabel('')
@@ -549,15 +551,24 @@ def plot_spectrum(boxes: list,
                         if quantity == 'flux':
                             flux_scaling = wavelength
 
+                        scale_tmp = flux_scaling / scaling
+
                         if isinstance(boxitem.flux[item][0], np.ndarray):
                             for i in range(boxitem.flux[item].shape[1]):
 
-                                plot_obj = ax1.errorbar(wavelength, flux_scaling*boxitem.flux[item][0, i]/scaling, xerr=fwhm/2.,
-                                             yerr=flux_scaling*boxitem.flux[item][1, i]/scaling, marker='s', ms=5, zorder=3, color='black')
+                                plot_obj = ax1.errorbar(wavelength,
+                                                        scale_tmp*boxitem.flux[item][0, i],
+                                                        xerr=fwhm/2.,
+                                                        yerr=scale_tmp*boxitem.flux[item][1, i],
+                                                        marker='s', ms=5, zorder=3, color='black')
 
                         else:
-                            plot_obj = ax1.errorbar(wavelength, flux_scaling*boxitem.flux[item][0]/scaling, xerr=fwhm/2.,
-                                         yerr=flux_scaling*boxitem.flux[item][1]/scaling, marker='s', ms=5, zorder=3, color='black')
+
+                            plot_obj = ax1.errorbar(wavelength,
+                                                    scale_tmp*boxitem.flux[item][0],
+                                                    xerr=fwhm/2.,
+                                                    yerr=scale_tmp*boxitem.flux[item][1],
+                                                    marker='s', ms=5, zorder=3, color='black')
 
                         plot_kwargs[j][item] = {'marker': 's', 'ms': 5., 'color': plot_obj[0].get_color()}
 
@@ -754,6 +765,15 @@ def plot_spectrum(boxes: list,
 
         else:
             ax1.legend(**legend)
+
+    if scale[0] == 'log':
+        ax1.xaxis.set_major_formatter(ScalarFormatter())
+
+        if ax2 is not None:
+            ax2.xaxis.set_major_formatter(ScalarFormatter())
+
+        if ax3 is not None:
+            ax3.xaxis.set_major_formatter(ScalarFormatter())
 
     # filters = ['Paranal/SPHERE.ZIMPOL_N_Ha',
     #            'MUSE/Hbeta',

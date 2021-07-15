@@ -65,6 +65,7 @@ from species.util.query_util import get_parallax
 
 from species.util.read_util import add_luminosity, \
                                    get_mass, \
+                                   get_radius, \
                                    powerlaw_spectrum, \
                                    gaussian_spectrum, \
                                    update_spectra

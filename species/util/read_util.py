@@ -21,6 +21,8 @@ from species.read import read_model, read_planck
 def get_mass(logg: Union[float, np.ndarray],
              radius: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
     """
+    Function for converting a :math:`\\log(g)` and a radius into a mass.
+
     Parameters
     ----------
     logg : float, np.ndarray
@@ -35,13 +37,36 @@ def get_mass(logg: Union[float, np.ndarray],
     """
 
     surface_grav = 1e-2 * 10.**logg  # (m s-2)
-
     radius *= constants.R_JUP  # (m)
-
     mass = surface_grav*radius**2/constants.GRAVITY  # (kg)
-    mass /= constants.M_JUP  # (Mjup)
 
-    return mass
+    return mass/constants.M_JUP
+
+
+@typechecked
+def get_radius(logg: Union[float, np.ndarray],
+               mass: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
+    """
+    Function for converting a :math:`\\log(g)` and a mass into a radius.
+
+    Parameters
+    ----------
+    logg : float, np.ndarray
+        Log10 of the surface gravity (cgs).
+    mass : float, np.ndarray
+        Mass (Mjup).
+
+    Returns
+    -------
+    float, np.ndarray
+        Radius (Rjup).
+    """
+
+    surface_grav = 1e-2 * 10.**logg  # (m s-2)
+    mass *= constants.M_JUP  # (kg)
+    radius = np.sqrt(mass*constants.GRAVITY/surface_grav)  # (m)
+
+    return radius/constants.R_JUP
 
 
 def add_luminosity(modelbox):

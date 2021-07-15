@@ -720,25 +720,25 @@ class ReadModel:
         if 'lognorm_radius' in model_param and 'lognorm_sigma' in model_param and \
                 'lognorm_ext' in model_param:
 
-            model_box.flux = self.apply_lognorm_ext(model_box.wavelength,
-                                                    model_box.flux,
-                                                    model_param['lognorm_radius'],
-                                                    model_param['lognorm_sigma'],
-                                                    model_param['lognorm_ext'])
+            model_box.flux = self.apply_ext_norm_distr(model_box.wavelength,
+                                                       model_box.flux,
+                                                       model_param['lognorm_radius'],
+                                                       model_param['lognorm_sigma'],
+                                                       model_param['lognorm_ext'])
 
         if 'powerlaw_max' in model_param and 'powerlaw_exp' in model_param and \
                 'powerlaw_ext' in model_param:
 
-            model_box.flux = self.apply_powerlaw_ext(model_box.wavelength,
-                                                     model_box.flux,
-                                                     model_param['powerlaw_max'],
-                                                     model_param['powerlaw_exp'],
-                                                     model_param['powerlaw_ext'])
+            model_box.flux = self.apply_ext_plaw_distr(model_box.wavelength,
+                                                       model_box.flux,
+                                                       model_param['powerlaw_max'],
+                                                       model_param['powerlaw_exp'],
+                                                       model_param['powerlaw_ext'])
 
         if 'ism_ext' in model_param:
             ism_reddening = model_param.get('ism_red', 3.1)
 
-            model_box.flux = self.apply_ism_ext(model_box.wavelength,
+            model_box.flux = self.apply_ext_ism(model_box.wavelength,
                                                 model_box.flux,
                                                 model_param['ism_ext'],
                                                 ism_reddening)

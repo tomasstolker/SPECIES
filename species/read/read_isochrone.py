@@ -11,11 +11,12 @@ from typing import Optional, Tuple
 import h5py
 import numpy as np
 
-from typeguard import typechecked
 from scipy.interpolate import griddata
+from typeguard import typechecked
 
 from species.core import box
 from species.read import read_model
+from species.util import read_util
 
 
 class ReadIsochrone:
@@ -161,7 +162,8 @@ class ReadIsochrone:
                             masses: np.ndarray,
                             model: str,
                             filters_color: Tuple[str, str],
-                            filter_mag: str) -> box.ColorMagBox:
+                            filter_mag: str,
+                            adapt_logg: bool = False) -> box.ColorMagBox:
         """
         Function for calculating color-magnitude combinations from a selected isochrone.
 
@@ -179,6 +181,11 @@ class ReadIsochrone:
         filter_mag : str
             Filter name for the absolute magnitude as listed in the file with the isochrone data.
             The value should be equal to one of the ``filters_color`` values.
+        adapt_logg : bool
+            Adapt :math:`\\log(g)` to the upper or lower boundary of the atmospheric model grid
+            whenever the :math:`\\log(g)` that has been calculated from the isochrone mass and
+            radius lies outside the available range of the synthetic spectra. Typically
+            :math:`\\log(g)` has only a minor impact on the broadband magnitudes and colors.
 
         Returns
         -------
@@ -194,6 +201,8 @@ class ReadIsochrone:
         model1 = read_model.ReadModel(model=model, filter_name=filters_color[0])
         model2 = read_model.ReadModel(model=model, filter_name=filters_color[1])
 
+        param_bounds = model1.get_bounds()
+
         if model1.get_parameters() != ['teff', 'logg']:
             raise ValueError('Creating synthetic colors and magnitudes from isochrones is '
                              'currently only implemented for models with only Teff and log(g) '
@@ -202,12 +211,15 @@ class ReadIsochrone:
 
         mag1 = np.zeros(isochrone.masses.shape[0])
         mag2 = np.zeros(isochrone.masses.shape[0])
+        radius = np.zeros(isochrone.masses.shape[0])
 
         for i, mass_item in enumerate(isochrone.masses):
             model_param = {'teff': isochrone.teff[i],
                            'logg': isochrone.logg[i],
                            'mass': mass_item,
                            'distance': 10.}
+
+            radius[i] = read_util.get_radius(model_param['logg'], model_param['mass'])  # (Rjup)
 
             if np.isnan(isochrone.teff[i]):
                 mag1[i] = np.nan
@@ -217,26 +229,48 @@ class ReadIsochrone:
                               f'{model_param}. Setting the magnitudes to NaN.')
 
             else:
-                for item_bounds in model1.get_bounds():
-                    if model_param[item_bounds] <= model1.get_bounds()[item_bounds][0]:
-                        mag1[i] = np.nan
-                        mag2[i] = np.nan
+                for item_bounds in param_bounds:
+                    if model_param[item_bounds] <= param_bounds[item_bounds][0]:
+                        if adapt_logg and item_bounds == 'logg':
+                            warnings.warn(f'The log(g) is {model_param[item_bounds]} but the '
+                                          f'lower boundary of the model grid is '
+                                          f'{param_bounds[item_bounds][0]}. Adapting '
+                                          f'log(g) to {param_bounds[item_bounds][0]} since '
+                                          f'adapt_logg=True.')
 
-                        warnings.warn(f'The value of {item_bounds} is {model_param[item_bounds]}, '
-                                      f'which is below the lower bound of the model grid '
-                                      f'({model1.get_bounds()[item_bounds][0]}). Setting the '
-                                      f'magnitudes to NaN for the following isochrone sample: '
-                                      f'{model_param}.')
+                            model_param['logg'] = param_bounds['logg'][0]
 
-                    elif model_param[item_bounds] >= model1.get_bounds()[item_bounds][1]:
-                        mag1[i] = np.nan
-                        mag2[i] = np.nan
+                        else:
+                            mag1[i] = np.nan
+                            mag2[i] = np.nan
 
-                        warnings.warn(f'The value of {item_bounds} is {model_param[item_bounds]}, '
-                                      f'which is above the upper bound of the model grid '
-                                      f'({model1.get_bounds()[item_bounds][1]}). Setting the '
-                                      f'magnitudes to NaN for the following isochrone sample: '
-                                      f'{model_param}.')
+                            warnings.warn(f'The value of {item_bounds} is '
+                                          f'{model_param[item_bounds]}, which is below the lower '
+                                          f'bound of the model grid '
+                                          f'({param_bounds[item_bounds][0]}). Setting the '
+                                          f'magnitudes to NaN for the following isochrone sample: '
+                                          f'{model_param}.')
+
+                    elif model_param[item_bounds] >= param_bounds[item_bounds][1]:
+                        if adapt_logg and item_bounds == 'logg':
+                            warnings.warn(f'The log(g) is {model_param[item_bounds]} but the '
+                                          f'upper boundary of the model grid is '
+                                          f'{param_bounds[item_bounds][1]}. Adapting '
+                                          f'log(g) to {param_bounds[item_bounds][1]} since '
+                                          f'adapt_logg=True.')
+
+                            model_param['logg'] = param_bounds['logg'][1]
+
+                        else:
+                            mag1[i] = np.nan
+                            mag2[i] = np.nan
+
+                            warnings.warn(f'The value of {item_bounds} is '
+                                          f'{model_param[item_bounds]}, which is above the upper '
+                                          f'bound of the model grid '
+                                          f'({param_bounds[item_bounds][1]}). Setting the '
+                                          f'magnitudes to NaN for the following isochrone sample: '
+                                          f'{model_param}.')
 
                 if not np.isnan(mag1[i]):
                     mag1[i], _ = model1.get_magnitude(model_param)
@@ -259,8 +293,10 @@ class ReadIsochrone:
                               filter_mag=filter_mag,
                               color=mag1-mag2,
                               magnitude=abs_mag,
+                              names=None,
                               sptype=masses,
-                              names=None)
+                              mass=masses,
+                              radius=radius)
 
     @typechecked
     def get_color_color(self,
@@ -310,12 +346,15 @@ class ReadIsochrone:
         mag2 = np.zeros(isochrone.masses.shape[0])
         mag3 = np.zeros(isochrone.masses.shape[0])
         mag4 = np.zeros(isochrone.masses.shape[0])
+        radius = np.zeros(isochrone.masses.shape[0])
 
         for i, mass_item in enumerate(isochrone.masses):
             model_param = {'teff': isochrone.teff[i],
                            'logg': isochrone.logg[i],
                            'mass': mass_item,
                            'distance': 10.}
+
+            radius[i] = read_util.get_radius(model_param['logg'], model_param['mass'])  # (Rjup)
 
             if np.isnan(isochrone.teff[i]):
                 mag1[i] = np.nan
@@ -365,5 +404,7 @@ class ReadIsochrone:
                               filters=filters_colors,
                               color1=mag1-mag2,
                               color2=mag3-mag4,
+                              names=None,
                               sptype=masses,
-                              names=None)
+                              mass=masses,
+                              radius=radius)

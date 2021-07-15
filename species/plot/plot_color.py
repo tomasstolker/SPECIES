@@ -75,7 +75,8 @@ def plot_color_magnitude(boxes: list,
         Plot accreting, directly imaged objects with a different symbol than the regular, directly
         imaged objects. The object names from ``objects`` will be compared with the data from
         :func:`~species.data.companions.get_data` to check if a companion is accreting or not.
-    reddening : list(tuple(tuple(str, str), tuple(str, float), str, float, tuple(float, float)), None
+    reddening : list(tuple(tuple(str, str), tuple(str, float), str, float,
+                tuple(float, float)), None
         Include reddening arrows by providing a list with tuples. Each tuple contains the filter
         names for the color, the filter name and value of the magnitude, the particle radius (um),
         and the start position (color, mag) of the arrow in the plot, so ``((filter_color_1,
@@ -211,7 +212,8 @@ def plot_color_magnitude(boxes: list,
                 label = plot_util.model_name(item.library)
 
                 if item.library == 'zhu2015':
-                    ax1.plot(item.color, item.magnitude, marker='x', ms=5, linestyle=model_linestyle[model_count[1]],
+                    ax1.plot(item.color, item.magnitude, marker='x', ms=5,
+                             linestyle=model_linestyle[model_count[1]],
                              linewidth=0.6, color='gray', label=label, zorder=0)
 
                     xlim = ax1.get_xlim()
@@ -223,11 +225,12 @@ def plot_color_magnitude(boxes: list,
                         if item.magnitude[i] > ylim[1]:
                             ax1.annotate(teff_label, (item.color[i], item.magnitude[i]),
                                          color='gray', fontsize=8, ha='left', va='center',
-                                         xytext=(item.color[i]+0.1, item.magnitude[i]+0.05), zorder=3)
+                                         xytext=(item.color[i]+0.1, item.magnitude[i]+0.05),
+                                         zorder=3)
 
                 else:
                     ax1.plot(item.color, item.magnitude, linestyle=model_linestyle[model_count[1]],
-                             linewidth=1., color=model_color[model_count[0]], label=label, zorder=0)
+                             lw=1., color=model_color[model_count[0]], label=label, zorder=0)
 
                     if mass_labels is not None:
                         interp_magnitude = interp1d(item.sptype, item.magnitude)
@@ -262,12 +265,13 @@ def plot_color_magnitude(boxes: list,
                                 if xlim[0]+0.2 < pos_color < xlim[1]-0.2 and \
                                         ylim[1]+0.2 < pos_mag < ylim[0]-0.2:
 
-                                    ax1.scatter(pos_color, pos_mag, c=model_color[model_count[0]], s=15,
-                                                edgecolor='none', zorder=0)
+                                    ax1.scatter(pos_color, pos_mag, c=model_color[model_count[0]],
+                                                s=15, edgecolor='none', zorder=0)
 
                                     ax1.annotate(mass_label, (pos_color, pos_mag),
                                                  color=model_color[model_count[0]], fontsize=9,
-                                                 xytext=mass_xytext, zorder=3, ha=mass_ha, va='center')
+                                                 xytext=mass_xytext, zorder=3, ha=mass_ha,
+                                                 va='center')
 
             else:
                 ax1.plot(item.color, item.magnitude, linestyle=model_linestyle[model_count[1]],
@@ -515,8 +519,8 @@ def plot_color_magnitude(boxes: list,
 @typechecked
 def plot_color_color(boxes: list,
                      objects: Optional[Union[List[Tuple[str, Tuple[str, str], Tuple[str, str]]],
-                                             List[Tuple[str, Tuple[str, str], Tuple[str, str], Optional[dict],
-                                                        Optional[dict]]]]] = None,
+                                             List[Tuple[str, Tuple[str, str], Tuple[str, str],
+                                                        Optional[dict], Optional[dict]]]]] = None,
                      mass_labels: Optional[Union[List[float], List[Tuple[float, str]]]] = None,
                      teff_labels: Optional[Union[List[float], List[Tuple[float, str]]]] = None,
                      companion_labels: bool = False,
@@ -562,7 +566,8 @@ def plot_color_color(boxes: list,
         to None.
     companion_labels : bool
         Plot labels with the names of the directly imaged companions.
-    reddening : list(tuple(tuple(str, str), tuple(str, str), tuple(str, float), str, float, tuple(float, float)), None
+    reddening : list(tuple(tuple(str, str), tuple(str, str), tuple(str, float), str, float,
+                tuple(float, float)), None
         Include reddening arrows by providing a list with tuples. Each tuple contains the filter
         names for the color, the filter name for the magnitude, the particle radius (um), and the
         start position (color, mag) of the arrow in the plot, so (filter_color_1, filter_color_2,
@@ -685,7 +690,8 @@ def plot_color_color(boxes: list,
                 label = plot_util.model_name(item.library)
 
                 if item.library == 'zhu2015':
-                    ax1.plot(item.color1, item.color2, marker='x', ms=5, linestyle=model_linestyle[model_count[1]],
+                    ax1.plot(item.color1, item.color2, marker='x', ms=5,
+                             linestyle=model_linestyle[model_count[1]],
                              linewidth=0.6, color='gray', label=label, zorder=0)
 
                     xlim = ax1.get_xlim()
@@ -697,11 +703,12 @@ def plot_color_color(boxes: list,
                         if item.color2[i] < ylim[1]:
                             ax1.annotate(teff_label, (item.color1[i], item.color2[i]),
                                          color='gray', fontsize=8, ha='left', va='center',
-                                         xytext=(item.color1[i]+0.1, item.color2[i]-0.05), zorder=3)
+                                         xytext=(item.color1[i]+0.1, item.color2[i]-0.05),
+                                         zorder=3)
 
                 else:
                     ax1.plot(item.color1, item.color2, linestyle=model_linestyle[model_count[1]],
-                             linewidth=1., color=model_color[model_count[0]], label=label, zorder=0)
+                             lw=1., color=model_color[model_count[0]], label=label, zorder=0)
 
                     if mass_labels is not None:
                         interp_color1 = interp1d(item.sptype, item.color1)
@@ -737,12 +744,14 @@ def plot_color_color(boxes: list,
                                 if xlim[0]+0.2 < pos_color1 < xlim[1]-0.2 and \
                                         ylim[0]+0.2 < pos_color2 < ylim[1]-0.2:
 
-                                    ax1.scatter(pos_color1, pos_color2, c=model_color[model_count[0]],
+                                    ax1.scatter(pos_color1, pos_color2,
+                                                c=model_color[model_count[0]],
                                                 s=15, edgecolor='none', zorder=0)
 
                                     ax1.annotate(mass_label, (pos_color1, pos_color2),
                                                  color=model_color[model_count[0]], fontsize=9,
-                                                 xytext=mass_xytext, ha=mass_ha, va='center', zorder=3)
+                                                 xytext=mass_xytext, ha=mass_ha, va='center',
+                                                 zorder=3)
 
             else:
                 ax1.plot(item.color1, item.color2, linestyle=model_linestyle[model_count[1]],

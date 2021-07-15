@@ -27,8 +27,13 @@ def create_box(boxtype,
         box.filter_mag = kwargs['filter_mag']
         box.color = kwargs['color']
         box.magnitude = kwargs['magnitude']
-        box.sptype = kwargs['sptype']
         box.names = kwargs['names']
+        if 'sptype' in kwargs:
+            box.sptype = kwargs['sptype']
+        if 'mass' in kwargs:
+            box.mass = kwargs['mass']
+        if 'radius' in kwargs:
+            box.radius = kwargs['radius']
 
     if boxtype == 'colorcolor':
         box = ColorColorBox()
@@ -37,8 +42,13 @@ def create_box(boxtype,
         box.filters = kwargs['filters']
         box.color1 = kwargs['color1']
         box.color2 = kwargs['color2']
-        box.sptype = kwargs['sptype']
         box.names = kwargs['names']
+        if 'sptype' in kwargs:
+            box.sptype = kwargs['sptype']
+        if 'mass' in kwargs:
+            box.mass = kwargs['mass']
+        if 'radius' in kwargs:
+            box.radius = kwargs['radius']
 
     elif boxtype == 'isochrone':
         box = IsochroneBox()
@@ -63,6 +73,7 @@ def create_box(boxtype,
         box = ObjectBox()
         box.name = kwargs['name']
         box.filters = kwargs['filters']
+        box.mean_wavel = kwargs['mean_wavel']
         box.magnitude = kwargs['magnitude']
         box.flux = kwargs['flux']
         box.distance = kwargs['distance']
@@ -171,8 +182,10 @@ class ColorMagBox(Box):
         self.filter_mag = None
         self.color = None
         self.magnitude = None
-        self.sptype = None
         self.names = None
+        self.sptype = None
+        self.mass = None
+        self.radius = None
 
 
 class ColorColorBox(Box):
@@ -193,8 +206,10 @@ class ColorColorBox(Box):
         self.filters = None
         self.color1 = None
         self.color2 = None
-        self.sptype = None
         self.names = None
+        self.sptype = None
+        self.mass = None
+        self.radius = None
 
 
 class IsochroneBox(Box):
@@ -303,6 +318,7 @@ class ObjectBox(Box):
 
         self.name = None
         self.filters = None
+        self.mean_wavel = None
         self.magnitude = None
         self.flux = None
         self.distance = None

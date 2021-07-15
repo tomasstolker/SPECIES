@@ -70,6 +70,20 @@ def download_filter(filter_id: str) -> Tuple[Optional[np.ndarray],
 
         os.remove('VisAO_zp_filter_curve.dat')
 
+    elif filter_id == 'Keck/NIRC2.NB_4.05':
+        # The filter profile of Br_alpha has been digitized from
+        # https://www2.keck.hawaii.edu/inst/nirc2/filters.html
+
+        url = 'https://home.strw.leidenuniv.nl/~stolker/species/Keck_NIRC2.NB_4.05.dat'
+        urllib.request.urlretrieve(url, 'Keck_NIRC2.NB_4.05.dat')
+
+        wavelength, transmission = np.loadtxt('Keck_NIRC2.NB_4.05.dat', unpack=True)
+
+        # Not sure if energy- or photon-counting detector
+        det_type = 'photon'
+
+        os.remove('Keck_NIRC2.NB_4.05.dat')
+
     elif filter_id in ['LCO/VisAO.Ys', 'Magellan/VisAO.Ys']:
         url = 'https://xwcl.science/magao/visao/VisAO_Ys_filter_curve.dat'
         urllib.request.urlretrieve(url, 'VisAO_Ys_filter_curve.dat')
