@@ -78,12 +78,13 @@ def plot_color_magnitude(boxes: list,
     reddening : list(tuple(tuple(str, str), tuple(str, float), str, float,
                 tuple(float, float)), None
         Include reddening arrows by providing a list with tuples. Each tuple contains the filter
-        names for the color, the filter name and value of the magnitude, the particle radius (um),
-        and the start position (color, mag) of the arrow in the plot, so ``((filter_color_1,
+        names for the color, the filter name and value of the magnitude, the mean particle radius
+        (um), and the start position (color, mag) of the arrow in the plot, so ``((filter_color_1,
         filter_color_2), (filter_mag, mag_value), composition, radius, (x_pos, y_pos))``. The
-        composition can be either ``'Fe'`` or ``'MgSiO3'`` (both with crystalline structure). Both
-        ``xlim`` and ``ylim`` need to be set for the correct rotation of the reddening label. The
-        parameter is not used if set to ``None``.
+        composition can be either ``'Fe'`` or ``'MgSiO3'`` (both with crystalline structure). A
+        log-normal size distribution is used with the specified mean radius and the geometric
+        standard deviation is fixed to 2. Both ``xlim`` and ``ylim`` need to be set for the correct
+        rotation of the reddening label. The parameter is not used if set to ``None``.
     field_range : tuple(str, str), None
         Range of the discrete colorbar for the field dwarfs. The tuple should contain the lower
         and upper value ('early M', 'late M', 'early L', 'late L', 'early T', 'late T', 'early Y).

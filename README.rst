@@ -10,7 +10,7 @@
    :target: https://pypi.python.org/pypi/species
 
 .. image:: https://img.shields.io/travis/tomasstolker/species
-   :target: https://travis-ci.org/tomasstolker/species
+   :target: https://travis-ci.com/tomasstolker/species
 
 .. image:: https://img.shields.io/readthedocs/species
    :target: http://species.readthedocs.io

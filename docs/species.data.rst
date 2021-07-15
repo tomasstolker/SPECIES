@@ -4,6 +4,14 @@ species.data package
 Submodules
 ----------
 
+species.data.allers2013 module
+------------------------------
+
+.. automodule:: species.data.allers2013
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 species.data.ames\_cond module
 ------------------------------
 
@@ -32,6 +40,14 @@ species.data.blackbody module
 -----------------------------
 
 .. automodule:: species.data.blackbody
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+species.data.bonnefoy2014 module
+--------------------------------
+
+.. automodule:: species.data.bonnefoy2014
    :members:
    :undoc-members:
    :show-inheritance:

@@ -229,8 +229,8 @@ def get_data() -> Dict[str, Dict[str, Union[bool, Tuple[float, float],
                                      'Magellan/VisAO.ip': (18.89, 0.24),  # Wu et al. 2017
                                      'Magellan/VisAO.zp': (16.40, 0.10),  # Wu et al. 2017
                                      'Magellan/VisAO.Ys': (15.88, 0.10),  # Wu et al. 2017
-                                     # 'MKO/NSFCam.H': (14.02, 0.13),  # Stolker et al. in prep.
-                                     'Paranal/NACO.NB405': (12.29, 0.07),  # Stolker et al. in prep.
+                                     'MKO/NSFCam.H': (14.01, 0.13),  # Stolker et al. in prep.
+                                     'Paranal/NACO.NB405': (12.29, 0.06),  # Stolker et al. in prep.
                                      'Paranal/NACO.Mp': (11.97, 0.08),  # Stolker et al. in prep.
                                      'Paranal/NACO.Ks': [(13.474, 0.031),  # Ginski et al. 2014
                                                          (13.386, 0.032),  # Ginski et al. 2014
@@ -245,6 +245,7 @@ def get_data() -> Dict[str, Dict[str, Union[bool, Tuple[float, float],
                          'radius_companion': (3.6, 0.1),  # Stolker et al. in prep.
                          'accretion': True,  # Seifahrt et al. 2007
                          'line_flux': {'h-alpha': (3.31e-18, 0.04e-18),  # Stolker et al. in prep.
+                                       'h-beta': (2.7e-19, 2.7e-19),  # Stolker et al. in prep.
                                        'pa-beta': (1.32e-18, 0.01e-18)}},  # Stolker et al. in prep.
 
             'PZ Tel B': {'distance': (47.13, 0.13),
@@ -301,9 +302,9 @@ def get_data() -> Dict[str, Dict[str, Union[bool, Tuple[float, float],
                           'accretion': False},
 
             'ROXs 42 Bb': {'distance': (144.16, 1.53),
-                           'app_mag': {'Keck/NIRC2.J': (16.91, 0.11),  # Daemgen et al. 2017
-                                       'Keck/NIRC2.H': (15.88, 0.05),  # Daemgen et al. 2017
-                                       'Keck/NIRC2.Ks': (15.01, 0.06),  # Daemgen et al. 2017
+                           'app_mag': {'Keck/NIRC2.J': (16.91, 0.11),  # Currie et al. 2014b
+                                       'Keck/NIRC2.H': (15.88, 0.05),  # Currie et al. 2014a
+                                       'Keck/NIRC2.Ks': (15.01, 0.06),  # Currie et al. 2014b
                                        'Keck/NIRC2.Lp': (13.97, 0.06),  # Daemgen et al. 2017
                                        'Keck/NIRC2.NB_4.05': (13.90, 0.08),  # Daemgen et al. 2017
                                        'Keck/NIRC2.Ms': (14.01, 0.23)},  # Daemgen et al. 2017
@@ -443,9 +444,13 @@ def get_data() -> Dict[str, Dict[str, Union[bool, Tuple[float, float],
                            'accretion': False},
 
             'HD 142527 B': {'distance': (159.26, 0.72),
-                            'app_mag': {'Paranal/NACO.H': (10.5, 0.2),  # Biller et al. 2012
-                                        'Paranal/NACO.Ks': (10.0, 0.3),  # Biller et al. 2012
-                                        'Paranal/NACO.Lp': (9.1, 0.1),  # Biller et al. 2012
+                            'app_mag': {'Paranal/NACO.J': (10.86, 0.05),  # Lacour et al. 2016
+                                        'Paranal/NACO.H': [(10.5, 0.2),  # Biller et al. 2012
+                                                           (10.3, 0.5)],  # Lacour et al. 2012
+                                        'Paranal/NACO.Ks': [(10.0, 0.3),  # Biller et al. 2012
+                                                            (9.8, 0.1)],  # Lacour et al. 2016
+                                        'Paranal/NACO.Lp': [(9.1, 0.1),  # Biller et al. 2012
+                                                            (9.1, 0.1)],  # Lacour et al. 2016
                                         'Paranal/NACO.Mp': (9.2, 0.2)},  # Lacour et al. 2016
                             'semi_major': (38., 20.),  # Claudi et al. 2019
                             'mass_star': (2.0, 0.3),  # Mendigutía et al. 2014

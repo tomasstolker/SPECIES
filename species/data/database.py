@@ -23,7 +23,7 @@ from species.core import box, constants
 from species.data import ames_cond, ames_dusty, atmo, blackbody, btcond, btcond_feh, btnextgen, \
                          btsettl, btsettl_cifist, companions, drift_phoenix, dust, exo_rem, \
                          filters, irtf, isochrones, leggett, petitcode, spex, vega, vlm_plx, \
-                         kesseli2017, morley2012
+                         kesseli2017, morley2012, bonnefoy2014, allers2013
 from species.read import read_calibration, read_filter, read_model, read_object, read_planck
 from species.util import data_util, dust_util, read_util
 
@@ -154,7 +154,7 @@ class Database:
         """
         Function for adding the magnitudes and spectra of directly imaged planets and brown dwarfs
         from :class:`~species.data.companions.get_data` and
-        :class:`~species.data.companions.get_comp_spec`to the database.
+        :class:`~species.data.companions.get_comp_spec` to the database.
 
         Parameters
         ----------
@@ -619,7 +619,7 @@ class Database:
 
         if app_mag is not None:
             if 'spectra/calibration/vega' not in h5_file:
-                self.add_spectrum('vega')
+                self.add_spectra('vega')
 
             for item in app_mag:
                 if f'filters/{item}' not in h5_file:
@@ -627,7 +627,7 @@ class Database:
 
         if flux_density is not None:
             if 'spectra/calibration/vega' not in h5_file:
-                self.add_spectrum('vega')
+                self.add_spectra('vega')
 
             for item in flux_density:
                 if f'filters/{item}' not in h5_file:
@@ -801,9 +801,8 @@ class Database:
             for flux_item in flux_density:
                 if isinstance(deredden, float) or flux_item in deredden:
                     warnings.warn(f'The deredden parameter is not supported by flux_density. '
-                                  f'Please use app_mag instead or contact Tomas Stolker and ask '
-                                  f'if the flux_density support can be added. Ignoring the '
-                                  f'dereddening of {flux_item}.')
+                                  f'Please use app_mag instead and/or open an issue on Github. '
+                                  f'Ignoring the dereddening of {flux_item}.')
 
                 if f'objects/{object_name}/{flux_item}' in h5_file:
                     del h5_file[f'objects/{object_name}/{flux_item}']
@@ -823,7 +822,7 @@ class Database:
                     dset = h5_file.create_dataset(f'objects/{object_name}/{flux_item}',
                                                   data=data)
 
-                    dset.attrs['n_phot'] = n_phot
+                    dset.attrs['n_phot'] = 1
 
         if spectrum is not None:
             read_spec = {}
@@ -1156,10 +1155,62 @@ class Database:
                      spec_library: str,
                      sptypes: Optional[List[str]] = None) -> None:
         """
+        DEPRECATION: This method is deprecated and will be removed in a future release. Please use
+        the :meth:`~species.data.database.Database.add_spectra` method instead.
+
         Parameters
         ----------
         spec_library : str
-            Spectral library ('irtf', 'spex', 'kesseli+2017').
+            Spectral library ('irtf', 'spex', 'kesseli+2017', 'bonnefoy+2014', 'allers+2013').
+        sptypes : list(str)
+            Spectral types ('F', 'G', 'K', 'M', 'L', 'T'). Currently only implemented for 'irtf'.
+
+        Returns
+        -------
+        NoneType
+            None
+        """
+
+        warnings.warn('This method is deprecated and will be removed in a future release. Please '
+                      'use the add_spectra method instead.')
+
+        h5_file = h5py.File(self.database, 'a')
+
+        if 'spectra' not in h5_file:
+            h5_file.create_group('spectra')
+
+        if 'spectra/'+spec_library in h5_file:
+            del h5_file['spectra/'+spec_library]
+
+        if spec_library[0:5] == 'vega':
+            vega.add_vega(self.input_path, h5_file)
+
+        elif spec_library[0:5] == 'irtf':
+            irtf.add_irtf(self.input_path, h5_file, sptypes)
+
+        elif spec_library[0:5] == 'spex':
+            spex.add_spex(self.input_path, h5_file)
+
+        elif spec_library[0:12] == 'kesseli+2017':
+            kesseli2017.add_kesseli2017(self.input_path, h5_file)
+
+        elif spec_library[0:13] == 'bonnefoy+2014':
+            bonnefoy2014.add_bonnefoy2014(self.input_path, h5_file)
+
+        elif spec_library[0:11] == 'allers+2013':
+            allers2013.add_allers2013(self.input_path, h5_file)
+
+        h5_file.close()
+
+    @typechecked
+    def add_spectra(self,
+                    spec_library: str,
+                    sptypes: Optional[List[str]] = None) -> None:
+        """
+        Parameters
+        ----------
+        spec_library : str
+            Spectral library ('irtf', 'spex', 'kesseli+2017', 'bonnefoy+2014', 'allers+2013').
         sptypes : list(str)
             Spectral types ('F', 'G', 'K', 'M', 'L', 'T'). Currently only implemented for 'irtf'.
 
@@ -1188,6 +1239,12 @@ class Database:
 
         elif spec_library[0:12] == 'kesseli+2017':
             kesseli2017.add_kesseli2017(self.input_path, h5_file)
+
+        elif spec_library[0:13] == 'bonnefoy+2014':
+            bonnefoy2014.add_bonnefoy2014(self.input_path, h5_file)
+
+        elif spec_library[0:11] == 'allers+2013':
+            allers2013.add_allers2013(self.input_path, h5_file)
 
         h5_file.close()
 
@@ -1477,6 +1534,7 @@ class Database:
                     if spec_name == spec_fix:
                         continue
 
+                    # Factor for scaling the observed spectrum to the model spectrum
                     model_param[f'scaling_{spec_name}'] = (
                         dset.attrs[f'radius_{spec_fix}'] / dset.attrs[f'radius_{spec_name}'])**2
 
@@ -1957,11 +2015,11 @@ class Database:
                       names: List[str],
                       sptypes: List[str],
                       goodness_of_fit: List[float],
-                      flux_scaling: List[float],
+                      flux_scaling: List[np.ndarray],
                       av_ext: List[float],
                       rad_vel: List[float],
                       object_name: str,
-                      spec_name: str,
+                      spec_name: List[str],
                       spec_library: str) -> None:
         """
         Parameters
@@ -1974,8 +2032,10 @@ class Database:
             Array with the spectral types of ``names``.
         goodness_of_fit : list(float)
             Array with the goodness-of-fit values.
-        flux_scaling : list(float)
-            Array with the best-fit scaling values to match the library spectra with the data.
+        flux_scaling : list(np.ndarray)
+            List with arrays with the best-fit scaling values to match the library spectra with
+            the data. The size of each array is equal to the number of spectra that are provided
+            as argument of ``spec_name``.
         av_ext : list(float)
             Array with the visual extinction :math:`A_V`.
         rad_vel : list(float)
@@ -1984,8 +2044,8 @@ class Database:
             Object name as stored in the database with
             :func:`~species.data.database.Database.add_object` or
             :func:`~species.data.database.Database.add_companion`.
-        spec_name : str
-            Name of the spectrum that is stored at the object data of ``object_name``.
+        spec_name : list(str)
+            List with spectrum names that are stored at the object data of ``object_name``.
         spec_library : str
             Name of the spectral library that was used for the empirical comparison.
 
@@ -2014,8 +2074,11 @@ class Database:
             dset[...] = names
 
             dset.attrs['object_name'] = str(object_name)
-            dset.attrs['spec_name'] = str(spec_name)
             dset.attrs['spec_library'] = str(spec_library)
+            dset.attrs['n_spec_name'] = len(spec_name)
+
+            for i, item in enumerate(spec_name):
+                dset.attrs[f'spec_name{i}'] = item
 
             dset = h5_file.create_dataset(f'results/empirical/{tag}/sptypes',
                                           (np.size(sptypes), ), dtype=dtype)

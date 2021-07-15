@@ -20,8 +20,14 @@ Or, to update to the most recent version:
 
    $ pip install --upgrade species
 
+Please check for any errors and warnings during the installation to make sure that all dependencies are correctly installed.
+
 .. important::
-   Currently it is recommended to install *species* from Github (see below) in order to benefit from the most recent implementations. The available package on PyPI is also stable but it usually trails behind the version on Github.
+   Before installing ``species``, it is required (for ``UltraNest``) to separately install ``cython``:
+
+   .. code-block:: console
+
+       $ pip install cython
 
 Installation from Github
 ------------------------

@@ -90,7 +90,7 @@ class ReadSpectrum:
         except KeyError:
             h5_file.close()
             species_db = database.Database()
-            species_db.add_spectrum(self.spec_library, sptypes)
+            species_db.add_spectra(self.spec_library, sptypes)
             h5_file = h5py.File(self.database, 'r')
 
         list_wavelength = []

@@ -228,7 +228,7 @@ def add_spex(input_path: str,
             else:
                 distance = (np.nan, np.nan)
 
-            print_message = f'Adding SpeX Prism Spectral Library... {name}'
+            print_message = f'Adding spectra... {name}'
             print(f'\r{print_message:<72}', end='')
 
             dset = database.create_dataset(f'spectra/spex/{name}', data=spdata)
@@ -249,7 +249,7 @@ def add_spex(input_path: str,
             dset.attrs['distance'] = distance[0]  # (pc)
             dset.attrs['distance_error'] = distance[1]  # (pc)
 
-    print_message = 'Adding SpeX Prism Spectral Library... [DONE]'
+    print_message = 'Adding spectra... [DONE]'
     print(f'\r{print_message:<72}')
 
     database.close()

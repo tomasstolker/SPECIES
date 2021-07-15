@@ -81,7 +81,7 @@ class SyntheticPhotometry:
         except KeyError:
             h5_file.close()
             species_db = database.Database()
-            species_db.add_spectrum('vega')
+            species_db.add_spectra('vega')
             h5_file = h5py.File(self.database, 'r')
 
         readcalib = read_calibration.ReadCalibration('vega', None)

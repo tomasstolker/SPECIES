@@ -360,7 +360,7 @@ def update_labels(param: List[str]) -> List[str]:
 
     if 'line_vrad' in param:
         index = param.index('line_vrad')
-        param[index] = r'v$_\mathregular{r}$ (km s$^{-1}$)'
+        param[index] = r'RV (km s$^{-1}$)'
 
     return param
 

@@ -1,7 +1,6 @@
 astropy ~= 4.1.0
 astroquery ~= 0.4.0
 corner ~= 2.1.0
-cython ~= 0.29.0
 emcee ~= 3.0.0
 h5py ~= 2.10.0
 matplotlib ~= 3.3.0

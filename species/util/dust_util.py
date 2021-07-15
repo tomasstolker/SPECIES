@@ -515,10 +515,10 @@ def interp_powerlaw(inc_phot: List[str],
 @typechecked
 def ism_extinction(av_mag: float,
                    rv_red: float,
-                   wavelengths: np.ndarray) -> np.ndarray:
+                   wavelengths: Union[np.ndarray, List[float], float]) -> np.ndarray:
     """
     Function for calculating the optical and IR extinction with the empirical relation from
-    Cardelli et al. (1989).
+    `Cardelli et al. (1989) <https://ui.adsabs.harvard.edu/abs/1989ApJ...345..245C/abstract>`_.
 
     Parameters
     ----------
@@ -526,14 +526,21 @@ def ism_extinction(av_mag: float,
         Extinction (mag) in the V band.
     rv_red : float
         Reddening in the V band, ``R_V = A_V / E(B-V)``.
-    wavelengths : np.ndarray
-        Array with the wavelengths (um) for which the extinction is calculated.
+    wavelengths : np.ndarray, list(float), float
+        Array or list with the wavelengths (um) for which the extinction is calculated.
+        It is also possible to provide a single value as float.
 
     Returns
     -------
     np.ndarray
         Extinction (mag) at ``wavelengths``.
     """
+
+    if isinstance(wavelengths, float):
+        wavelengths = np.array([wavelengths])
+
+    elif isinstance(wavelengths, list):
+        wavelengths = np.array(wavelengths)
 
     x_wavel = 1./wavelengths
     y_wavel = x_wavel - 1.82

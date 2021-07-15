@@ -1,11 +1,10 @@
 """
-Module with a function for plotting spectra.
+Module with a function for plotting a spectral energy distribution.
 """
 
 import os
 import math
 import warnings
-import itertools
 
 from typing import Optional, Union, Tuple, List
 
@@ -14,7 +13,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 from typeguard import typechecked
-from matplotlib.ticker import AutoMinorLocator, MultipleLocator, ScalarFormatter
+from matplotlib.ticker import AutoMinorLocator, ScalarFormatter
 
 from species.core import box, constants
 from species.read import read_filter
@@ -37,8 +36,12 @@ def plot_spectrum(boxes: list,
                   figsize: Optional[Tuple[float, float]] = (10., 5.),
                   object_type: str = 'planet',
                   quantity: str = 'flux density',
-                  output: str = 'spectrum.pdf'):
+                  output: str = 'spectrum.pdf',
+                  leg_param: Optional[List[str]] = None):
     """
+    Function for plotting a spectral energy distribution and combining various data such as spectra,
+    photometric fluxes, model spectra, synthetic photometry, fit residuals, and filter profiles.
+
     Parameters
     ----------
     boxes : list(species.core.box, )
@@ -99,6 +102,11 @@ def plot_spectrum(boxes: list,
         The quantity of the y-axis ('flux density', 'flux', or 'magnitude').
     output : str
         Output filename.
+    leg_param : list(str), None
+        List with the parameters to include in the legend of the model spectra. Apart from
+        atmospheric parameters (e.g. 'teff', 'logg', 'radius') also parameters such as 'mass'
+        and 'luminosity' can be included. The default atmospheric parameters are included in the
+        legend if the argument is set to ``None``.
 
     Returns
     -------
@@ -336,11 +344,16 @@ def plot_spectrum(boxes: list,
                 if isinstance(boxitem, box.ModelBox):
                     param = boxitem.parameters
 
+                    if leg_param is not None:
+                        for item in list(param.keys()):
+                            if item not in leg_param:
+                                del param[item]
+
                     par_key, par_unit, par_label = plot_util.quantity_unit(
                         param=list(param.keys()), object_type=object_type)
 
                     label = ''
-                    newline = False
+                    # newline = False
 
                     for i, item in enumerate(par_key):
                         if item[:4] == 'teff':
@@ -365,14 +378,14 @@ def plot_spectrum(boxes: list,
                             elif object_type == 'star':
                                 value = f'{param[item]*constants.R_JUP/constants.R_SUN:.1f}'
 
-                        # elif item == 'mass':
-                        #     if object_type == 'planet':
-                        #         value = f'{param[item]:.0f}'
-                        #
-                        #     elif object_type == 'star':
-                        #         value = f'{param[item]*constants.M_JUP/constants.M_SUN:.1f}'
+                        elif item == 'mass' and leg_param is not None and item in leg_param:
+                            if object_type == 'planet':
+                                value = f'{param[item]:.0f}'
 
-                        elif item == 'luminosity':
+                            elif object_type == 'star':
+                                value = f'{param[item]*constants.M_JUP/constants.M_SUN:.1f}'
+
+                        elif item == 'luminosity' and leg_param is not None and item in leg_param:
                             value = f'{np.log10(param[item]):.2f}'
 
                         else:
@@ -679,7 +692,10 @@ def plot_spectrum(boxes: list,
                                              residuals.photometry[item][1, i], zorder=2,
                                              **plot_kwargs[obj_index][item])
 
-                res_max = np.nanmax(np.abs(residuals.photometry[item][1]))
+                res_test = np.nanmax(np.abs(residuals.photometry[item][1]))
+
+                if not np.isnan(res_test):
+                    res_max = np.nanmax(np.abs(residuals.photometry[item][1]))
 
         if residuals.spectrum is not None:
             for key, value in residuals.spectrum.items():
@@ -700,8 +716,10 @@ def plot_spectrum(boxes: list,
             res_lim = 5.
 
         ax3.axhline(0., ls='--', lw=0.7, color='gray', dashes=(2, 4), zorder=0.5)
-        # ax3.axhline(-2.5, ls=':', lw=0.7, color='gray', dashes=(1, 4), zorder=0.5)
-        # ax3.axhline(2.5, ls=':', lw=0.7, color='gray', dashes=(1, 4), zorder=0.5)
+
+        if res_lim > 5.:
+            ax3.axhline(-5., ls=':', lw=0.7, color='gray', dashes=(1, 4), zorder=0.5)
+            ax3.axhline(5., ls=':', lw=0.7, color='gray', dashes=(1, 4), zorder=0.5)
 
         if ylim_res is None:
             ax3.set_ylim(-res_lim, res_lim)
@@ -753,9 +771,9 @@ def plot_spectrum(boxes: list,
 
             if legend[1] is not None:
                 if isinstance(legend[1], (str, tuple)):
-                    leg_2 = ax1.legend(data_handles, data_labels, loc=legend[1], fontsize=8, frameon=False)
+                    ax1.legend(data_handles, data_labels, loc=legend[1], fontsize=8, frameon=False)
                 else:
-                    leg_2 = ax1.legend(data_handles, data_labels, **legend[1])
+                    ax1.legend(data_handles, data_labels, **legend[1])
 
             if leg_1 is not None:
                 ax1.add_artist(leg_1)

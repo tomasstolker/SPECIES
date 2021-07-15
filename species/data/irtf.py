@@ -135,7 +135,7 @@ def add_irtf(input_path: str,
                         empty_message = len(print_message) * ' '
                         print(f'\r{empty_message}', end='')
 
-                        print_message = f'Adding IRTF Spectral Library... {name}'
+                        print_message = f'Adding spectra... {name}'
                         print(f'\r{print_message}', end='')
 
                         simbad_id = query_util.get_simbad(name)
@@ -169,7 +169,7 @@ def add_irtf(input_path: str,
     empty_message = len(print_message) * ' '
     print(f'\r{empty_message}', end='')
 
-    print_message = 'Adding IRTF Spectral Library... [DONE]'
+    print_message = 'Adding spectra... [DONE]'
     print(f'\r{print_message}')
 
     database.close()
