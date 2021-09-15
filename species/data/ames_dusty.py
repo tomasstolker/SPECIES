@@ -3,7 +3,6 @@ Module for AMES-Dusty atmospheric model spectra.
 """
 
 import os
-import gzip
 import tarfile
 import urllib.request
 

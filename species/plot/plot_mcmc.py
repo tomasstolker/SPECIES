@@ -19,7 +19,7 @@ from scipy.interpolate import RegularGridInterpolator
 
 from species.core import constants
 from species.data import database
-from species.util import plot_util, dust_util, read_util
+from species.util import plot_util, dust_util, read_util, retrieval_util
 
 
 @typechecked
@@ -128,12 +128,15 @@ def plot_posterior(tag: str,
                    offset: Optional[Tuple[float, float]] = None,
                    title_fmt: Union[str, List[str]] = '.2f',
                    limits: Optional[List[Tuple[float, float]]] = None,
-                   max_posterior: bool = False,
+                   max_prob: bool = False,
+                   vmr: bool = False,
                    inc_luminosity: bool = False,
                    inc_mass: bool = False,
+                   inc_pt_param: bool = False,
+                   inc_loglike: bool = False,
                    output: str = 'posterior.pdf') -> None:
     """
-    Function to plot the posterior distribution.
+    Function to plot the posterior distribution of the fitted parameters.
 
     Parameters
     ----------
@@ -151,13 +154,21 @@ def plot_posterior(tag: str,
         order as shown in the corner plot).
     limits : list(tuple(float, float), ), None
         Axis limits of all parameters. Automatically set if set to ``None``.
-    max_posterior : bool
+    max_prob : bool
         Plot the position of the sample with the maximum posterior probability.
+    vmr : bool
+        Plot the volume mixing ratios (i.e. number fractions) instead of the mass fractions of the
+        retrieved species with :class:`~species.analysis.retrieval.AtmosphericRetrieval`.
     inc_luminosity : bool
         Include the log10 of the luminosity in the posterior plot as calculated from the
         effective temperature and radius.
     inc_mass : bool
         Include the mass in the posterior plot as calculated from the surface gravity and radius.
+    inc_pt_param : bool
+        Include the parameters of the pressure-temperature profile. Only used if the ``tag``
+        contains samples obtained with :class:`~species.analysis.retrieval.AtmosphericRetrieval`.
+    inc_loglike : bool
+        Include the log10 of the likelihood as additional parameter in the corner plot.
     output : str
         Output filename.
 
@@ -176,14 +187,204 @@ def plot_posterior(tag: str,
         burnin = 0
 
     species_db = database.Database()
+
     box = species_db.get_samples(tag, burnin=burnin)
+    samples = box.samples
+
+    # index_sel = [0, 1, 8, 9, 14]
+    # samples = samples[:, index_sel]
+    #
+    # for i in range(13, 9, -1):
+    #     del box.parameters[i]
+    #
+    # del box.parameters[2]
+    # del box.parameters[2]
+    # del box.parameters[2]
+    # del box.parameters[2]
+    # del box.parameters[2]
+    # del box.parameters[2]
+
+    ndim = len(box.parameters)
+
+    if not inc_pt_param and box.spectrum == 'petitradtrans':
+        pt_param = ['tint', 't1', 't2', 't3', 'alpha', 'log_delta']
+
+        index_del = []
+        item_del = []
+
+        for i in range(100):
+            pt_item = f't{i}'
+
+            if pt_item in box.parameters:
+                param_index = np.argwhere(np.array(box.parameters) == pt_item)[0]
+                index_del.append(param_index)
+                item_del.append(pt_item)
+
+            else:
+                break
+
+        for item in pt_param:
+            if item in box.parameters and item not in item_del:
+                param_index = np.argwhere(np.array(box.parameters) == item)[0]
+                index_del.append(param_index)
+                item_del.append(item)
+
+        samples = np.delete(samples, index_del, axis=1)
+        ndim -= len(index_del)
+
+        for item in item_del:
+            box.parameters.remove(item)
+
+    if box.spectrum == 'petitradtrans' and box.attributes['chemistry'] == 'free':
+        box.parameters.append('c_h_ratio')
+        box.parameters.append('o_h_ratio')
+        box.parameters.append('c_o_ratio')
+
+        ndim += 3
+
+        abund_index = {}
+        for i, item in enumerate(box.parameters):
+            if item == 'CH4':
+                abund_index['CH4'] = i
+
+            elif item == 'CO':
+                abund_index['CO'] = i
+
+            elif item == 'CO_all_iso':
+                abund_index['CO_all_iso'] = i
+
+            elif item == 'CO2':
+                abund_index['CO2'] = i
+
+            elif item == 'FeH':
+                abund_index['FeH'] = i
+
+            elif item == 'H2O':
+                abund_index['H2O'] = i
+
+            elif item == 'H2S':
+                abund_index['H2S'] = i
+
+            elif item == 'Na':
+                abund_index['Na'] = i
+
+            elif item == 'NH3':
+                abund_index['NH3'] = i
+
+            elif item == 'K':
+                abund_index['K'] = i
+
+            elif item == 'PH3':
+                abund_index['PH3'] = i
+
+            elif item == 'TiO':
+                abund_index['TiO'] = i
+
+            elif item == 'VO':
+                abund_index['VO'] = i
+
+        c_h_ratio = np.zeros(samples.shape[0])
+        o_h_ratio = np.zeros(samples.shape[0])
+        c_o_ratio = np.zeros(samples.shape[0])
+
+        for i, item in enumerate(samples):
+            abund = {}
+
+            if 'CH4' in box.parameters:
+                abund['CH4'] = item[abund_index['CH4']]
+
+            if 'CO' in box.parameters:
+                abund['CO'] = item[abund_index['CO']]
+
+            if 'CO_all_iso' in box.parameters:
+                abund['CO_all_iso'] = item[abund_index['CO_all_iso']]
+
+            if 'CO2' in box.parameters:
+                abund['CO2'] = item[abund_index['CO2']]
+
+            if 'FeH' in box.parameters:
+                abund['FeH'] = item[abund_index['FeH']]
+
+            if 'H2O' in box.parameters:
+                abund['H2O'] = item[abund_index['H2O']]
+
+            if 'H2S' in box.parameters:
+                abund['H2S'] = item[abund_index['H2S']]
+
+            if 'Na' in box.parameters:
+                abund['Na'] = item[abund_index['Na']]
+
+            if 'NH3' in box.parameters:
+                abund['NH3'] = item[abund_index['NH3']]
+
+            if 'K' in box.parameters:
+                abund['K'] = item[abund_index['K']]
+
+            if 'PH3' in box.parameters:
+                abund['PH3'] = item[abund_index['PH3']]
+
+            if 'TiO' in box.parameters:
+                abund['TiO'] = item[abund_index['TiO']]
+
+            if 'VO' in box.parameters:
+                abund['VO'] = item[abund_index['VO']]
+
+            if 'VO' in box.parameters:
+                abund['VO'] = item[abund_index['VO']]
+
+            c_h_ratio[i], o_h_ratio[i], c_o_ratio[i] = retrieval_util.calc_metal_ratio(abund)
+
+    if vmr and box.spectrum == 'petitradtrans' and \
+            box.attributes['chemistry'] == 'free':
+        print('Changing mass fractions to number fractions...', end='', flush=True)
+
+        # Get all available line species
+        line_species = retrieval_util.get_line_species()
+
+        # Get the atomic and molecular masses
+        masses = retrieval_util.atomic_masses()
+
+        # Create array for the updated samples
+        updated_samples = np.zeros(samples.shape)
+
+        for i, samples_item in enumerate(samples):
+            # Initiate a dictionary for the log10 mass fraction of the metals
+            log_x_abund = {}
+
+            for param_item in box.parameters:
+                if param_item in line_species:
+                    # Get the index of the parameter
+                    param_index = box.parameters.index(param_item)
+
+                    # Store log10 mass fraction in the dictionary
+                    log_x_abund[param_item] = samples_item[param_index]
+
+            # Create a dictionary with all mass fractions, including H2 and He
+            x_abund = retrieval_util.mass_fractions(log_x_abund)
+
+            # Calculate the mean molecular weight from the input mass fractions
+            mmw = retrieval_util.mean_molecular_weight(x_abund)
+
+            for param_item in box.parameters:
+                if param_item in line_species:
+                    # Get the index of the parameter
+                    param_index = box.parameters.index(param_item)
+
+                    # Overwrite the sample with the log10 number fraction
+                    samples_item[param_index] = np.log10(10.**samples_item[param_index] *
+                                                         mmw/masses[param_item])
+
+            # Store the updated sample to the array
+            updated_samples[i, ] = samples_item
+
+        # Overwrite the samples in the SamplesBox
+        box.samples = updated_samples
+
+        print(' [DONE]')
 
     print('Median sample:')
     for key, value in box.median_sample.items():
         print(f'   - {key} = {value:.2e}')
-
-    samples = box.samples
-    ndim = samples.shape[-1]
 
     if 'gauss_mean' in box.parameters:
         param_index = np.argwhere(np.array(box.parameters) == 'gauss_mean')[0]
@@ -200,7 +401,17 @@ def plot_posterior(tag: str,
         for key, value in box.prob_sample.items():
             print(f'   - {key} = {value:.2e}')
 
+    for item in box.parameters:
+        if item[0:11] == 'wavelength_':
+            param_index = box.parameters.index(item)
+
+            # (um) -> (nm)
+            box.samples[:, param_index] *= 1e3
+
     print(f'Plotting the posterior: {output}...', end='', flush=True)
+
+    if 'H2O' in box.parameters:
+        samples = np.column_stack((samples, c_h_ratio, o_h_ratio, c_o_ratio))
 
     if inc_luminosity:
         if 'teff' in box.parameters and 'radius' in box.parameters:
@@ -307,6 +518,26 @@ def plot_posterior(tag: str,
         else:
             warnings.warn('Samples with the log(g) and radius are required for \'inc_mass=True\'.')
 
+    if inc_loglike:
+        # Get ln(L) of the samples
+        ln_prob = box.ln_prob[..., np.newaxis]
+
+        # Normalized by the maximum ln(L)
+        ln_prob -= np.amax(ln_prob)
+
+        # Convert ln(L) to log10(L)
+        log_prob = ln_prob*np.exp(1.)
+
+        # Convert log10(L) to L
+        prob = 10.**log_prob
+
+        # Normalize to an integrated probability of 1
+        prob /= np.sum(prob)
+
+        samples = np.append(samples, np.log10(prob), axis=-1)
+        box.parameters.append('log_prob')
+        ndim += 1
+
     labels = plot_util.update_labels(box.parameters)
 
     # Check if parameter values were fixed
@@ -314,25 +545,24 @@ def plot_posterior(tag: str,
     index_sel = []
     index_del = []
 
-    # Use only last axis for parameter dimensions
     for i in range(ndim):
-        if np.amin(samples[..., i]) == np.amax(samples[..., i]):
+        if np.amin(samples[:, i]) == np.amax(samples[:, i]):
             index_del.append(i)
         else:
             index_sel.append(i)
 
-    samples = samples[..., index_sel]
+    samples = samples[:, index_sel]
 
     for i in range(len(index_del)-1, -1, -1):
         del labels[index_del[i]]
 
     ndim -= len(index_del)
 
+    samples = samples.reshape((-1, ndim))
+
     if isinstance(title_fmt, list) and len(title_fmt) != ndim:
         raise ValueError(f'The number of items in the list of \'title_fmt\' ({len(title_fmt)}) is '
                          f'not equal to the number of dimensions of the samples ({ndim}).')
-
-    samples = samples.reshape((-1, ndim))
 
     hist_titles = []
 
@@ -403,11 +633,11 @@ def plot_posterior(tag: str,
                 if limits is not None:
                     ax.set_xlim(limits[j])
 
-                if max_posterior:
+                if max_prob:
                     ax.axvline(par_val[j], color='tomato')
 
                 if i > j:
-                    if max_posterior:
+                    if max_prob:
                         ax.axhline(par_val[i], color='tomato')
                         ax.plot(par_val[j], par_val[i], 's', color='tomato')
 
@@ -821,6 +1051,7 @@ def plot_extinction(tag: str,
             ism_red = samples[:, red_index]
 
         else:
+            # Use default ISM redenning (R_V = 3.1) if ism_red was not fitted
             ism_red = np.full(samples.shape[0], 3.1)
 
         for i in range(samples.shape[0]):

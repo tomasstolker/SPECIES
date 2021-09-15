@@ -60,6 +60,14 @@ species.util.read\_util module
    :undoc-members:
    :show-inheritance:
 
+species.util.retrieval\_util module
+-----------------------------------
+
+.. automodule:: species.util.retrieval_util
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 species.util.test\_util module
 ------------------------------
 

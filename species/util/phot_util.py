@@ -14,7 +14,7 @@ from typeguard import typechecked
 
 from species.analysis import photometry
 from species.core import box
-from species.read import read_calibration, read_filter, read_model, read_planck
+from species.read import read_calibration, read_filter, read_model, read_planck, read_radtrans
 from species.util import read_util
 
 
@@ -22,18 +22,23 @@ from species.util import read_util
 def multi_photometry(datatype: str,
                      spectrum: str,
                      filters: List[str],
-                     parameters: Dict[str, float]) -> box.SynphotBox:
+                     parameters: Dict[str, float],
+                     radtrans: Optional[read_radtrans.ReadRadtrans] = None) -> box.SynphotBox:
     """
     Parameters
     ----------
     datatype : str
         Data type ('model' or 'calibration').
     spectrum : str
-        Spectrum name (e.g., 'drift-phoenix', 'planck', 'powerlaw').
-    filters : list(str, )
+        Spectrum name (e.g., 'drift-phoenix', 'planck', 'powerlaw', 'petitradtrans').
+    filters : list(str)
         List with the filter names.
     parameters : dict
         Dictionary with the model parameters.
+    radtrans : read_radtrans.ReadRadtrans, None
+        Instance of :class:`~species.read.read_radtrans.ReadRadtrans`. Only required with
+        ``spectrum='petitradtrans'`. Make sure that the ``wavel_range`` of the ``ReadRadtrans``
+        instance is sufficiently broad to cover all the ``filters``. Not used if set to `None`.
 
     Returns
     -------
@@ -46,9 +51,19 @@ def multi_photometry(datatype: str,
     flux = {}
 
     if datatype == 'model':
+        if spectrum == 'petitradtrans':
+            # Calculate the petitRADTRANS spectrum only once
+            radtrans_box = radtrans.get_model(parameters)
+
         for item in filters:
-            if spectrum == 'planck':
-                readmodel = read_planck.ReadPlanck(filter_name=item)
+
+            if spectrum == 'petitradtrans':
+                # Use an instance of SyntheticPhotometry instead of get_flux from ReadRadtrans
+                # in order to not recalculate the spectrum
+                syn_phot = photometry.SyntheticPhotometry(item)
+
+                flux[item], _ = syn_phot.spectrum_to_flux(radtrans_box.wavelength,
+                                                          radtrans_box.flux)
 
             elif spectrum == 'powerlaw':
                 synphot = photometry.SyntheticPhotometry(item)
@@ -58,7 +73,11 @@ def multi_photometry(datatype: str,
                 flux[item] = synphot.spectrum_to_flux(powerl_box.wavelength, powerl_box.flux)[0]
 
             else:
-                readmodel = read_model.ReadModel(spectrum, filter_name=item)
+                if spectrum == 'planck':
+                    readmodel = read_planck.ReadPlanck(filter_name=item)
+
+                else:
+                    readmodel = read_model.ReadModel(spectrum, filter_name=item)
 
                 try:
                     flux[item] = readmodel.get_flux(parameters)[0]
@@ -161,7 +180,8 @@ def get_residuals(datatype: str,
                   objectbox: box.ObjectBox,
                   inc_phot: Union[bool, List[str]] = True,
                   inc_spec: Union[bool, List[str]] = True,
-                  **kwargs_radtrans: Optional[Union[dict, list]]) -> box.ResidualsBox:
+                  radtrans: Optional[read_radtrans.ReadRadtrans] = None) -> box.ResidualsBox:
+
     """
     Parameters
     ----------
@@ -184,22 +204,17 @@ def get_residuals(datatype: str,
         (``False``) of the data are selected. If a list, a subset of spectrum names (as stored
         in the database with :func:`~species.data.database.Database.add_object`) can be
         provided.
-
-    Keyword arguments
-    -----------------
-    kwargs_radtrans : dict
-        Dictionary with the keyword arguments for the ``ReadRadtrans`` object, containing
-        ``line_species``, ``cloud_species``, and ``scattering``.
+    radtrans : read_radtrans.ReadRadtrans, None
+        Instance of :class:`~species.read.read_radtrans.ReadRadtrans`. Only required with
+        ``spectrum='petitradtrans'`. Make sure that the ``wavel_range`` of the ``ReadRadtrans``
+        instance is sufficiently broad to cover all the photometric and spectroscopic data of
+        ``inc_phot`` and ``inc_spec``. Not used if set to ``None``.
 
     Returns
     -------
     species.core.box.ResidualsBox
         Box with the residuals.
     """
-
-    if 'filters' in kwargs_radtrans:
-        warnings.warn('The \'filters\' parameter has been deprecated. Please use the \'inc_phot\' '
-                      'parameter instead. The \'filters\' parameter is ignored.')
 
     if isinstance(inc_phot, bool) and inc_phot:
         inc_phot = objectbox.filters
@@ -208,7 +223,8 @@ def get_residuals(datatype: str,
         model_phot = multi_photometry(datatype=datatype,
                                       spectrum=spectrum,
                                       filters=inc_phot,
-                                      parameters=parameters)
+                                      parameters=parameters,
+                                      radtrans=radtrans)
 
         res_phot = {}
 
@@ -233,9 +249,12 @@ def get_residuals(datatype: str,
     if inc_spec:
         res_spec = {}
 
-        readmodel = None
+        if spectrum == 'petitradtrans':
+            # Calculate the petitRADTRANS spectrum only once
+            model = radtrans.get_model(parameters)
 
         for key in objectbox.spectrum:
+
             if isinstance(inc_spec, bool) or key in inc_spec:
                 wavel_range = (0.9*objectbox.spectrum[key][0][0, 0],
                                1.1*objectbox.spectrum[key][0][-1, 0])
@@ -247,6 +266,17 @@ def get_residuals(datatype: str,
 
                     model = readmodel.get_spectrum(model_param=parameters, spec_res=1000.)
 
+                    # Separate resampling to the new wavelength points
+
+                    flux_new = spectres.spectres(wavel_resample,
+                                                 model.wavelength,
+                                                 model.flux,
+                                                 spec_errs=None,
+                                                 fill=0.,
+                                                 verbose=True)
+
+                elif spectrum == 'petitradtrans':
+                    # Separate resampling to the new wavelength points
                     flux_new = spectres.spectres(wavel_resample,
                                                  model.wavelength,
                                                  model.flux,

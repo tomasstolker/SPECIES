@@ -3,8 +3,8 @@ Module with functionalities for reading and writing of data.
 """
 
 import configparser
-import os
 import json
+import os
 import warnings
 
 from typing import Dict, List, Optional, Tuple, Union
@@ -16,6 +16,7 @@ import tqdm
 
 from astropy.io import fits
 from scipy import linalg
+from scipy.integrate import simps
 from typeguard import typechecked
 
 from species.analysis import photometry
@@ -24,8 +25,9 @@ from species.data import ames_cond, ames_dusty, atmo, blackbody, btcond, btcond_
                          btsettl, btsettl_cifist, companions, drift_phoenix, dust, exo_rem, \
                          filters, irtf, isochrones, leggett, petitcode, spex, vega, vlm_plx, \
                          kesseli2017, morley2012, bonnefoy2014, allers2013
-from species.read import read_calibration, read_filter, read_model, read_object, read_planck
-from species.util import data_util, dust_util, read_util
+from species.read import read_calibration, read_filter, read_model, read_object, read_planck, \
+                         read_radtrans
+from species.util import data_util, dust_util, read_util, retrieval_util
 
 
 class Database:
@@ -279,8 +281,17 @@ class Database:
             wavelength, transmission, detector_type = filters.download_filter(filter_name)
 
         if wavelength is not None and transmission is not None:
+            wavel_new = [wavelength[0]]
+            transm_new = [transmission[0]]
+
+            for i in range(wavelength.size-1):
+                if wavelength[i+1] > wavel_new[-1]:
+                    # Required for the issue with the Keck/NIRC2.J filter on SVO
+                    wavel_new.append(wavelength[i+1])
+                    transm_new.append(transmission[i+1])
+
             dset = h5_file.create_dataset(f'filters/{filter_name}',
-                                          data=np.column_stack((wavelength, transmission)))
+                                          data=np.column_stack((wavel_new, transm_new)))
 
             dset.attrs['det_type'] = str(detector_type)
 
@@ -1387,12 +1398,12 @@ class Database:
             n_param = dset.attrs['nparam']
 
         if samples.ndim == 3:
-            if burnin > samples.shape[1]:
+            if burnin > samples.shape[0]:
                 raise ValueError(f'The \'burnin\' value is larger than the number of steps '
                                  f'({samples.shape[1]}) that are made by the walkers.')
 
-            samples = samples[:, burnin:, :]
-            ln_prob = ln_prob[:, burnin:]
+            samples = samples[burnin:, :, :]
+            ln_prob = ln_prob[burnin:, :]
 
             samples = np.reshape(samples, (-1, n_param))
             ln_prob = np.reshape(ln_prob, -1)
@@ -1410,8 +1421,11 @@ class Database:
 
             prob_sample[par_key] = par_value
 
-        if dset.attrs.__contains__('distance'):
+        if 'distance' in dset.attrs:
             prob_sample['distance'] = dset.attrs['distance']
+
+        if 'pt_smooth' in dset.attrs:
+            prob_sample['pt_smooth'] = dset.attrs['pt_smooth']
 
         h5_file.close()
 
@@ -1453,12 +1467,12 @@ class Database:
             # samples = samples[samples[:, 2] > 100., ]
 
             if samples.ndim == 3:
-                if burnin > samples.shape[1]:
+                if burnin > samples.shape[0]:
                     raise ValueError(f'The \'burnin\' value is larger than the number of steps '
                                      f'({samples.shape[1]}) that are made by the walkers.')
 
                 if burnin is not None:
-                    samples = samples[:, burnin:, :]
+                    samples = samples[burnin:, :, :]
 
                 samples = np.reshape(samples, (-1, n_param))
 
@@ -1466,18 +1480,20 @@ class Database:
 
             for i in range(n_param):
                 par_key = dset.attrs[f'parameter{i}']
-                par_value = np.percentile(samples[:, i], 50.)
+                par_value = np.median(samples[:, i])
                 median_sample[par_key] = par_value
 
-            if dset.attrs.__contains__('distance'):
+            if 'distance' in dset.attrs:
                 median_sample['distance'] = dset.attrs['distance']
+
+            if 'pt_smooth' in dset.attrs:
+                median_sample['pt_smooth'] = dset.attrs['pt_smooth']
 
         return median_sample
 
     @typechecked
     def get_compare_sample(self,
-                           tag: str,
-                           spec_fix: Optional[str] = None) -> Dict[str, float]:
+                           tag: str) -> Dict[str, float]:
         """
         Function for extracting the sample parameters with the highest posterior probability.
 
@@ -1486,15 +1502,6 @@ class Database:
         tag : str
             Database tag where the results from
             :meth:`~species.analysis.compare_spectra.CompareSpectra.compare_model` are stored.
-        spec_fix : str, None
-            After comparing multiple spectra with a model grid, one of the flux scalings need to
-            be used to calculate the planet radius (i.e. scaling = (radius/distance)^2). The name
-            of this spectrum is specified as argument of ``spec_fix``. For the other spectra,
-            the same radius will be used and an additional scaling parameter will be included in
-            the returned dictionary. When passing the returned dictionary to
-            :func:`~species.util.read_util.update_spectra`, the spectra can be updated with the
-            derived scaling corrections. The argument can be set to ``None`` if a single spectrum
-            was used for the comparison.
 
         Returns
         -------
@@ -1506,7 +1513,7 @@ class Database:
             dset = h5_file[f'results/comparison/{tag}/goodness_of_fit']
 
             n_param = dset.attrs['n_param']
-            n_spec_name = dset.attrs['n_spec_name']
+            n_scale_spec = dset.attrs['n_scale_spec']
 
             model_param = {}
 
@@ -1514,29 +1521,11 @@ class Database:
                 model_param[dset.attrs[f'parameter{i}']] = dset.attrs[f'best_param{i}']
 
             model_param['distance'] = dset.attrs['distance']
+            model_param['radius'] = dset.attrs['radius']
 
-            if n_spec_name == 1:
-                spec_name = dset.attrs['spec_name0']
-                model_param['radius'] = dset.attrs[f'radius_{spec_name}']
-
-            else:
-                if spec_fix is None:
-                    raise ValueError('The argument of \'spec_fix\' should be set when the results '
-                                     'from CompareSpectra.compare_model have been obtained by '
-                                     'combining multiple spectra (i.e. the argument of '
-                                     '\'spec_name\' in CompareSpectra).')
-
-                model_param['radius'] = dset.attrs[f'radius_{spec_fix}']
-
-                for i in range(n_spec_name):
-                    spec_name = dset.attrs[f'spec_name{i}']
-
-                    if spec_name == spec_fix:
-                        continue
-
-                    # Factor for scaling the observed spectrum to the model spectrum
-                    model_param[f'scaling_{spec_name}'] = (
-                        dset.attrs[f'radius_{spec_fix}'] / dset.attrs[f'radius_{spec_name}'])**2
+            for i in range(n_scale_spec):
+                scale_spec = dset.attrs[f'scale_spec{i}']
+                model_param[f'scaling_{scale_spec}'] = dset.attrs[f'scaling_{scale_spec}']
 
         return model_param
 
@@ -1563,7 +1552,7 @@ class Database:
             using nested sampling.
         wavel_range : tuple(float, float), str, None
             Wavelength range (um) or filter name. Full spectrum is used if set to ``None``.
-        spec_res : float
+        spec_res : float, None
             Spectral resolution that is used for the smoothing with a Gaussian kernel. No smoothing
             is applied if the argument set to ``None``.
         wavel_resample : np.ndarray, None
@@ -1621,7 +1610,7 @@ class Database:
             warnings.warn('Smoothing of the spectral resolution is not implemented for calibration '
                           'spectra.')
 
-        if dset.attrs.__contains__('distance'):
+        if 'distance' in dset.attrs:
             distance = dset.attrs['distance']
         else:
             distance = None
@@ -1635,11 +1624,11 @@ class Database:
             samples = samples[ran_index, ]
 
         elif samples.ndim == 3:
-            if burnin > samples.shape[1]:
+            if burnin > samples.shape[0]:
                 raise ValueError(f'The \'burnin\' value is larger than the number of steps '
                                  f'({samples.shape[1]}) that are made by the walkers.')
 
-            samples = samples[:, burnin:, :]
+            samples = samples[burnin:, :, :]
 
             ran_walker = np.random.randint(samples.shape[0], size=random)
             ran_step = np.random.randint(samples.shape[1], size=random)
@@ -1747,7 +1736,7 @@ class Database:
         spectrum_type = dset.attrs['type']
         spectrum_name = dset.attrs['spectrum']
 
-        if dset.attrs.__contains__('distance'):
+        if 'distance' in dset.attrs:
             distance = dset.attrs['distance']
         else:
             distance = None
@@ -1755,11 +1744,11 @@ class Database:
         samples = np.asarray(dset)
 
         if samples.ndim == 3:
-            if burnin > samples.shape[1]:
+            if burnin > samples.shape[0]:
                 raise ValueError(f'The \'burnin\' value is larger than the number of steps '
                                  f'({samples.shape[1]}) that are made by the walkers.')
 
-            samples = samples[:, burnin:, :]
+            samples = samples[burnin:, :, :]
             samples = samples.reshape((samples.shape[0]*samples.shape[1], n_param))
 
         param = []
@@ -1951,6 +1940,10 @@ class Database:
         dset = h5_file[f'results/fit/{tag}/samples']
         ln_prob = np.asarray(h5_file[f'results/fit/{tag}/ln_prob'])
 
+        attributes = {}
+        for item in dset.attrs:
+            attributes[item] = dset.attrs[item]
+
         spectrum = dset.attrs['spectrum']
 
         if 'n_param' in dset.attrs:
@@ -1967,16 +1960,20 @@ class Database:
         samples = np.asarray(dset)
 
         if samples.ndim == 3:
-            if burnin > samples.shape[1]:
+            if burnin > samples.shape[0]:
                 raise ValueError(f'The \'burnin\' value is larger than the number of steps '
                                  f'({samples.shape[1]}) that are made by the walkers.')
 
-            samples = samples[:, burnin:, :]
+            samples = samples[burnin:, :, :]
 
-            if random:
+            if random is not None:
                 ran_walker = np.random.randint(samples.shape[0], size=random)
                 ran_step = np.random.randint(samples.shape[1], size=random)
                 samples = samples[ran_walker, ran_step, :]
+
+        elif samples.ndim == 2 and random is not None:
+            indices = np.random.randint(samples.shape[0], size=random)
+            samples = samples[indices, :]
 
         param = []
         for i in range(n_param):
@@ -2007,7 +2004,127 @@ class Database:
                               ln_prob=ln_prob,
                               ln_evidence=ln_evidence,
                               prob_sample=prob_sample,
-                              median_sample=median_sample)
+                              median_sample=median_sample,
+                              attributes=attributes)
+
+    @typechecked
+    def get_pt_profiles(self,
+                        tag: str,
+                        random: Optional[int] = None,
+                        out_file: Optional[str] = None) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Method for returning the pressure-temperature profiles from the atmospheric retrieval
+        with ``petitRADTRANS``. The data can also be optionally stored to an output file.
+
+        Parameters
+        ----------
+        tag: str
+            Database tag with the posterior samples from the atmospheric retrieval with
+            :class:`~species.analysis.retrieval.AtmosphericRetrieval`.
+        random : int, None
+            Number of random samples that will be used for the P-T profiles. All samples
+            will be selected if set to ``None``.
+        out_file : str, None
+            Output file to store the P-T profiles. The data will be stored in a FITS file if the
+            argument of ``out_file`` ends with `.fits`. Otherwise, the data will be written to a
+            text file. The data has two dimensions with the first column containing the pressures
+            (bar) and the remaining columns the temperature profiles (K). The data will not be
+            written to a file if the argument is set to ``None``.
+
+        Returns
+        -------
+        np.ndarray
+            Array (1D) with the pressures (bar).
+        np.ndarray
+            Array (2D) with the temperature profiles (K). The shape of the array is
+            (n_pressures, n_samples).
+        """
+
+        h5_file = h5py.File(self.database, 'r')
+        dset = h5_file[f'results/fit/{tag}/samples']
+
+        spectrum = dset.attrs['spectrum']
+        pt_profile = dset.attrs['pt_profile']
+
+        if spectrum != 'petitradtrans':
+            raise ValueError(f'The model spectrum of the posterior samples is \'{spectrum}\' '
+                             f'instead of \'petitradtrans\'. Extracting P-T profiles is '
+                             f'therefore not possible.')
+
+        if 'n_param' in dset.attrs:
+            n_param = dset.attrs['n_param']
+        elif 'nparam' in dset.attrs:
+            n_param = dset.attrs['nparam']
+
+        samples = np.asarray(dset)
+
+        if random is None:
+            n_profiles = samples.shape[0]
+
+        else:
+            n_profiles = random
+
+            indices = np.random.randint(samples.shape[0], size=random)
+            samples = samples[indices, :]
+
+        param_index = {}
+        for i in range(n_param):
+            param_index[dset.attrs[f'parameter{i}']] = i
+
+        h5_file.close()
+
+        press = np.logspace(-6, 3, 180)  # (bar)
+
+        temp = np.zeros((press.shape[0], n_profiles))
+
+        desc = f'Extracting the P-T profiles of {tag}'
+
+        for i in tqdm.tqdm(range(samples.shape[0]), desc=desc):
+            item = samples[i, :]
+
+            if pt_profile == 'molliere':
+                three_temp = np.array([item[param_index['t1']],
+                                       item[param_index['t2']],
+                                       item[param_index['t3']]])
+
+                temp[:, i], _, _ = retrieval_util.pt_ret_model(
+                    three_temp, 10.**item[param_index['log_delta']], item[param_index['alpha']],
+                    item[param_index['tint']], press, item[param_index['metallicity']],
+                    item[param_index['c_o_ratio']])
+
+            elif pt_profile == 'mod-molliere':
+                temp[:, i], _, _ = retrieval_util.pt_ret_model(
+                    None, 10.**item[param_index['log_delta']], item[param_index['alpha']],
+                    item[param_index['tint']], press, item[param_index['metallicity']],
+                    item[param_index['c_o_ratio']])
+
+            elif pt_profile in ['free', 'monotonic']:
+                if 'pt_smooth' in param_index:
+                    pt_smooth = item[param_index['pt_smooth']]
+                else:
+                    pt_smooth = 0.
+
+                knot_press = np.logspace(np.log10(press[0]), np.log10(press[-1]), 15)
+
+                knot_temp = []
+                for j in range(15):
+                    knot_temp.append(item[param_index[f't{i}']])
+
+                knot_temp = np.asarray(knot_temp)
+
+                temp[:, j] = retrieval_util.pt_spline_interp(
+                    knot_press, knot_temp, press, pt_smooth)
+
+        if out_file is not None:
+            data = np.hstack([press[..., np.newaxis], temp])
+
+            if out_file.endswith('.fits'):
+                fits.writeto(out_file, data, overwrite=True)
+
+            else:
+                np.savetxt(out_file, data, header='Pressure (bar) - Temperature (K)')
+
+        return press, temp
 
     @typechecked
     def add_empirical(self,
@@ -2048,7 +2165,6 @@ class Database:
             List with spectrum names that are stored at the object data of ``object_name``.
         spec_library : str
             Name of the spectral library that was used for the empirical comparison.
-
         Returns
         -------
         NoneType
@@ -2099,7 +2215,9 @@ class Database:
                        coord_points: List[np.ndarray],
                        object_name: str,
                        spec_name: List[str],
-                       model: str) -> None:
+                       model: str,
+                       scale_spec: List[str],
+                       extra_scaling: Optional[np.ndarray]) -> None:
         """
         Parameters
         ----------
@@ -2121,6 +2239,11 @@ class Database:
             List with spectrum names that are stored at the object data of ``object_name``.
         model : str
             Atmospheric model grid that is used for the comparison.
+        scale_spec : list(str)
+            List with spectrum names to which an additional scaling has been applied.
+        extra_scaling : np.ndarray. None
+            Array with extra scalings that have been applied to the spectra of ``scale_spec``.
+            The argument can be set to ``None`` if no extra scalings have been applied.
 
         Returns
         -------
@@ -2149,6 +2272,7 @@ class Database:
             dset.attrs['model'] = str(model)
             dset.attrs['n_param'] = len(model_param)
             dset.attrs['n_spec_name'] = len(spec_name)
+            dset.attrs['n_scale_spec'] = len(scale_spec)
             dset.attrs['distance'] = distance
 
             for i, item in enumerate(model_param):
@@ -2157,34 +2281,843 @@ class Database:
             for i, item in enumerate(spec_name):
                 dset.attrs[f'spec_name{i}'] = item
 
+            for i, item in enumerate(scale_spec):
+                dset.attrs[f'scale_spec{i}'] = item
+
             h5_file.create_dataset(f'results/comparison/{tag}/flux_scaling', data=flux_scaling)
+
+            if len(scale_spec) > 0:
+                h5_file.create_dataset(
+                    f'results/comparison/{tag}/extra_scaling', data=extra_scaling)
 
             for i, item in enumerate(coord_points):
                 h5_file.create_dataset(f'results/comparison/{tag}/coord_points{i}', data=item)
 
-            # Sum the goodness-of-fit of the different spectra
-            goodness_sum = np.sum(goodness_of_fit, axis=-1)
-
             # Indices of the best-fit model
-            best_index = np.unravel_index(goodness_sum.argmin(), goodness_sum.shape)
-            dset.attrs['best_fit'] = goodness_sum[best_index]
+            best_index = np.unravel_index(goodness_of_fit.argmin(), goodness_of_fit.shape)
+            dset.attrs['best_fit'] = goodness_of_fit[best_index]
 
             print('Best-fit parameters:')
-            print(f'   - Goodness-of-fit = {goodness_sum[best_index]:.2e}')
+            print(f'   - Goodness-of-fit = {goodness_of_fit[best_index]:.2e}')
 
             for i, item in enumerate(model_param):
                 best_param = coord_points[i][best_index[i]]
                 dset.attrs[f'best_param{i}'] = best_param
                 print(f'   - {item} = {best_param}')
 
-            for i, item in enumerate(spec_name):
-                scaling = flux_scaling[best_index[0], best_index[1], best_index[2], i]
+            scaling = flux_scaling[best_index[0], best_index[1], best_index[2]]
 
-                radius = np.sqrt(scaling * (distance*constants.PARSEC)**2)  # (m)
-                radius /= constants.R_JUP  # (Rjup)
+            radius = np.sqrt(scaling * (distance*constants.PARSEC)**2)  # (m)
+            radius /= constants.R_JUP  # (Rjup)
 
-                dset.attrs[f'radius_{item}'] = radius
-                print(f'   - {item} radius (Rjup) = {radius:.2f}')
+            dset.attrs['radius'] = radius
+            print(f'   - Radius (Rjup) = {radius:.2f}')
 
-                dset.attrs[f'scaling_{item}'] = scaling
-                print(f'   - {item} scaling = {scaling:.2e}')
+            dset.attrs['scaling'] = scaling
+            print(f'   - Scaling = {scaling:.2e}')
+
+            for i, item in enumerate(scale_spec):
+                scale_tmp = scaling / extra_scaling[best_index[0], best_index[1], best_index[2], i]
+                print(f'   - {item} scaling = {scale_tmp:.2e}')
+                dset.attrs[f'scaling_{item}'] = scale_tmp
+
+    def add_retrieval(self,
+                      tag: str,
+                      output_folder: str,
+                      inc_teff: bool = False) -> None:
+        """
+        Function for adding the output data from the atmospheric retrieval with
+        :class:`~species.analysis.retrieval.AtmosphericRetrieval` to the database.
+
+        Parameters
+        ----------
+        tag : str
+            Database tag to store the posterior samples.
+        output_folder : str
+            Output folder that was used for the output files by ``MultiNest``.
+        inc_teff : bool
+            Calculate Teff for each sample by integrating the model spectrum from 0.5 to 50 um.
+            The Teff samples are added to the array with samples that are stored in the database.
+            The computation time for adding Teff will be long because the spectra need to be
+            calculated and integrated for all samples.
+
+        Returns
+        -------
+        NoneType
+            None
+        """
+
+        print('Storing samples in the database...', end='', flush=True)
+
+        json_filename = os.path.join(output_folder, 'params.json')
+
+        with open(json_filename) as json_file:
+            parameters = json.load(json_file)
+
+        radtrans_filename = os.path.join(output_folder, 'radtrans.json')
+
+        with open(radtrans_filename) as json_file:
+            radtrans = json.load(json_file)
+
+        samples = np.loadtxt(os.path.join(output_folder, 'post_equal_weights.dat'))
+
+        with h5py.File(self.database, 'a') as h5_file:
+
+            if 'results' not in h5_file:
+                h5_file.create_group('results')
+
+            if 'results/fit' not in h5_file:
+                h5_file.create_group('results/fit')
+
+            if f'results/fit/{tag}' in h5_file:
+                del h5_file[f'results/fit/{tag}']
+
+            # Store the ln-likelihood
+            h5_file.create_dataset(f'results/fit/{tag}/ln_prob', data=samples[:, -1])
+
+            # Remove the column with the log-likelihood value
+            samples = samples[:, :-1]
+
+            if samples.shape[1] != len(parameters):
+                raise ValueError('The number of parameters is not equal to the parameter size '
+                                 'of the samples array.')
+
+            dset = h5_file.create_dataset(f'results/fit/{tag}/samples', data=samples)
+
+            dset.attrs['type'] = 'model'
+            dset.attrs['spectrum'] = 'petitradtrans'
+            dset.attrs['n_param'] = len(parameters)
+            dset.attrs['distance'] = radtrans['distance']
+
+            count_scale = 0
+            count_error = 0
+
+            for i, item in enumerate(parameters):
+                dset.attrs[f'parameter{i}'] = item
+
+            for i, item in enumerate(parameters):
+                if item[0:6] == 'scaling_':
+                    dset.attrs[f'scaling{count_scale}'] = item
+                    count_scale += 1
+
+            for i, item in enumerate(parameters):
+                if item[0:6] == 'error_':
+                    dset.attrs[f'error{count_error}'] = item
+                    count_error += 1
+
+            dset.attrs['n_scaling'] = count_scale
+            dset.attrs['n_error'] = count_error
+
+            for i, item in enumerate(radtrans['line_species']):
+                dset.attrs[f'line_species{i}'] = item
+
+            for i, item in enumerate(radtrans['cloud_species']):
+                dset.attrs[f'cloud_species{i}'] = item
+
+            dset.attrs['n_line_species'] = len(radtrans['line_species'])
+            dset.attrs['n_cloud_species'] = len(radtrans['cloud_species'])
+
+            dset.attrs['scattering'] = radtrans['scattering']
+            dset.attrs['pt_profile'] = radtrans['pt_profile']
+            dset.attrs['chemistry'] = radtrans['chemistry']
+            dset.attrs['wavel_min'] = radtrans['wavel_range'][0]
+            dset.attrs['wavel_max'] = radtrans['wavel_range'][1]
+
+            if radtrans['quenching'] is None:
+                dset.attrs['quenching'] = 'None'
+            else:
+                dset.attrs['quenching'] = radtrans['quenching']
+
+            if 'pt_smooth' in radtrans:
+                dset.attrs['pt_smooth'] = radtrans['pt_smooth']
+
+        print(' [DONE]')
+
+        rt_object = None
+
+        for i, cloud_item in enumerate(radtrans['cloud_species']):
+            if f'{cloud_item[:-6].lower()}_tau' in parameters:
+                pressure = np.logspace(-6, 3, 180)
+                cloud_mass = np.zeros(samples.shape[0])
+
+                if rt_object is None:
+                    print('Importing petitRADTRANS...', end='', flush=True)
+                    from petitRADTRANS.radtrans import Radtrans
+                    print(' [DONE]')
+
+                    print('Importing chemistry module...', end='', flush=True)
+                    from poor_mans_nonequ_chem_FeH.poor_mans_nonequ_chem.poor_mans_nonequ_chem \
+                        import interpol_abundances
+                    print(' [DONE]')
+
+                    rt_object = Radtrans(line_species=radtrans['line_species'],
+                                         rayleigh_species=['H2', 'He'],
+                                         cloud_species=radtrans['cloud_species'].copy(),
+                                         continuum_opacities=['H2-H2', 'H2-He'],
+                                         wlen_bords_micron=radtrans['wavel_range'],
+                                         mode='c-k',
+                                         test_ck_shuffle_comp=radtrans['scattering'],
+                                         do_scat_emis=radtrans['scattering'])
+
+                    if radtrans['pressure_grid'] == 'standard':
+                        rt_object.setup_opa_structure(pressure)
+
+                    elif radtrans['pressure_grid'] == 'smaller':
+                        rt_object.setup_opa_structure(pressure[::3])
+
+                    elif radtrans['pressure_grid'] == 'clouds':
+                        rt_object.setup_opa_structure(pressure[::24])
+
+                desc = f'Calculating mass fractions of {cloud_item[:-6]}'
+
+                for j in tqdm.tqdm(range(samples.shape[0]), desc=desc):
+                    sample_dict = retrieval_util.list_to_dict(parameters, samples[j, ])
+
+                    if radtrans['pt_profile'] == 'molliere':
+                        upper_temp = np.array([sample_dict['t1'],
+                                               sample_dict['t2'],
+                                               sample_dict['t3']])
+
+                        temp, _, _ = retrieval_util.pt_ret_model(
+                            upper_temp, 10.**sample_dict['log_delta'], sample_dict['alpha'],
+                            sample_dict['tint'], pressure, sample_dict['metallicity'],
+                            sample_dict['c_o_ratio'])
+
+                    elif radtrans['pt_profile'] == 'free' or radtrans['pt_profile'] == 'monotonic':
+                        knot_press = np.logspace(np.log10(pressure[0]), np.log10(pressure[-1]), 15)
+
+                        knot_temp = []
+                        for k in range(15):
+                            knot_temp.append(sample_dict[f't{k}'])
+
+                        knot_temp = np.asarray(knot_temp)
+
+                        pt_smooth = sample_dict.get('pt_smooth', radtrans['pt_smooth'])
+
+                        temp = retrieval_util.pt_spline_interp(
+                            knot_press, knot_temp, pressure, pt_smooth=pt_smooth)
+
+                    # Set the quenching pressure (bar)
+
+                    if 'log_p_quench' in parameters:
+                        quench_press = 10.**sample_dict['log_p_quench']
+                    else:
+                        quench_press = None
+
+                    abund_in = interpol_abundances(np.full(pressure.shape[0],
+                                                           sample_dict['c_o_ratio']),
+                                                   np.full(pressure.shape[0],
+                                                           sample_dict['metallicity']),
+                                                   temp,
+                                                   pressure,
+                                                   Pquench_carbon=quench_press)
+
+                    # Calculate the scaled mass fraction of the clouds
+
+                    cloud_mass[j] = retrieval_util.scale_cloud_abund(
+                        sample_dict, rt_object, pressure, temp, abund_in['MMW'], 'equilibrium',
+                        abund_in, cloud_item[:-3], sample_dict[f'{cloud_item[:-6].lower()}_tau'],
+                        pressure_grid=radtrans['pressure_grid'])
+
+                db_tag = f'results/fit/{tag}/samples'
+
+                with h5py.File(self.database, 'a') as h5_file:
+                    dset_attrs = h5_file[db_tag].attrs
+
+                    samples = np.asarray(h5_file[db_tag])
+                    samples = np.append(samples, cloud_mass[..., np.newaxis], axis=1)
+
+                    del h5_file[db_tag]
+                    dset = h5_file.create_dataset(db_tag, data=samples)
+
+                    for attr_item in dset_attrs:
+                        dset.attrs[attr_item] = dset_attrs[attr_item]
+
+                    n_param = dset_attrs['n_param'] + 1
+
+                    dset.attrs['n_param'] = n_param
+                    dset.attrs[f'parameter{n_param-1}'] = f'{cloud_item[:-6].lower()}_fraction'
+
+        if radtrans['quenching'] == 'diffusion':
+            p_quench = np.zeros(samples.shape[0])
+
+            desc = 'Calculating quenching pressures'
+
+            for i in tqdm.tqdm(range(samples.shape[0]), desc=desc):
+                # Convert list of parameters and samples into dictionary
+                sample_dict = retrieval_util.list_to_dict(parameters, samples[i, ])
+
+                # Recalculate the P-T profile from the sampled parameters
+
+                pressure = np.logspace(-6, 3, 180)  # (bar)
+
+                if radtrans['pt_profile'] == 'molliere':
+                    upper_temp = np.array([sample_dict['t1'],
+                                           sample_dict['t2'],
+                                           sample_dict['t3']])
+
+                    temp, _, _ = retrieval_util.pt_ret_model(
+                        upper_temp, 10.**sample_dict['log_delta'], sample_dict['alpha'],
+                        sample_dict['tint'], pressure, sample_dict['metallicity'],
+                        sample_dict['c_o_ratio'])
+
+                elif radtrans['pt_profile'] == 'free' or radtrans['pt_profile'] == 'monotonic':
+                    knot_press = np.logspace(np.log10(pressure[0]), np.log10(pressure[-1]), 15)
+
+                    knot_temp = []
+                    for k in range(15):
+                        knot_temp.append(sample_dict[f't{k}'])
+
+                    knot_temp = np.asarray(knot_temp)
+
+                    if 'pt_smooth' in sample_dict:
+                        pt_smooth = sample_dict['pt_smooth']
+                    else:
+                        pt_smooth = radtrans['pt_smooth']
+
+                    temp = retrieval_util.pt_spline_interp(
+                        knot_press, knot_temp, pressure, pt_smooth=pt_smooth)
+
+                # Calculate the quenching pressure
+
+                p_quench[i] = retrieval_util.quench_pressure(
+                    pressure, temp, sample_dict['metallicity'],
+                    sample_dict['c_o_ratio'], sample_dict['logg'],
+                    sample_dict['log_kzz'])
+
+            db_tag = f'results/fit/{tag}/samples'
+
+            with h5py.File(self.database, 'a') as h5_file:
+                dset_attrs = h5_file[db_tag].attrs
+
+                samples = np.asarray(h5_file[db_tag])
+                samples = np.append(samples, np.log10(p_quench[..., np.newaxis]), axis=1)
+
+                del h5_file[db_tag]
+                dset = h5_file.create_dataset(db_tag, data=samples)
+
+                for item in dset_attrs:
+                    dset.attrs[item] = dset_attrs[item]
+
+                n_param = dset_attrs['n_param'] + 1
+
+                dset.attrs['n_param'] = n_param
+                dset.attrs[f'parameter{n_param-1}'] = 'log_p_quench'
+
+        if inc_teff:
+            print('Calculating Teff from the posterior samples... ')
+
+            boxes, _ = self.get_retrieval_spectra(tag=tag,
+                                                  random=None,
+                                                  wavel_range=(0.5, 50.),
+                                                  spec_res=100.)
+
+            teff = np.zeros(len(boxes))
+
+            for i, box_item in enumerate(boxes):
+                sample_distance = box_item.parameters['distance']*constants.PARSEC
+                sample_radius = box_item.parameters['radius']*constants.R_JUP
+
+                # Scaling for the flux back to the planet surface
+                sample_scale = (sample_distance/sample_radius)**2
+
+                # Blackbody flux: sigma * Teff^4
+                flux_int = simps(sample_scale*box_item.flux, box_item.wavelength)
+                teff[i] = (flux_int/constants.SIGMA_SB)**0.25
+
+            db_tag = f'results/fit/{tag}/samples'
+
+            with h5py.File(self.database, 'a') as h5_file:
+                dset_attrs = h5_file[db_tag].attrs
+
+                samples = np.asarray(h5_file[db_tag])
+                samples = np.append(samples, teff[..., np.newaxis], axis=1)
+
+                del h5_file[db_tag]
+                dset = h5_file.create_dataset(db_tag, data=samples)
+
+                for item in dset_attrs:
+                    dset.attrs[item] = dset_attrs[item]
+
+                n_param = dset_attrs['n_param'] + 1
+
+                dset.attrs['n_param'] = n_param
+                dset.attrs[f'parameter{n_param-1}'] = 'teff'
+
+    @staticmethod
+    @typechecked
+    def get_retrieval_spectra(tag: str,
+                              random: Optional[int],
+                              wavel_range: Union[Tuple[float, float], str] = None,
+                              spec_res: Optional[float] = None) -> Tuple[
+                                  List[box.ModelBox], Union[read_radtrans.ReadRadtrans]]:
+        """
+        Function for extracting random spectra from the posterior distribution obtained with
+        :class:`~species.analysis.retrieval.AtmosphericRetrieval`.
+
+        Parameters
+        ----------
+        tag : str
+            Database tag with the posterior samples.
+        random : int, None
+            Number of randomly selected samples. All samples are used if set to ``None``.
+        wavel_range : tuple(float, float), str, None
+            Wavelength range (um) or filter name. The wavelength range from the retrieval is
+            adopted (i.e. the ``wavel_range`` parameter of
+            :class:`~species.analysis.retrieval.AtmosphericRetrieval`) when set to ``None``. It is
+            mandatory to set the argument to ``None`` in case the ``log_tau_cloud`` parameter has
+            been used with the retrieval.
+        spec_res : float, None
+            Spectral resolution that is used for the smoothing with a Gaussian kernel. No smoothing
+            is applied when the argument is set to ``None``.
+
+        Returns
+        -------
+        list(box.ModelBox)
+            Boxes with the randomly sampled spectra.
+        read_radtrans.Radtrans
+            Instance of :class:`~species.read.read_radtrans.ReadRadtrans`.
+        """
+
+        # Open configuration file
+
+        config_file = os.path.join(os.getcwd(), 'species_config.ini')
+
+        config = configparser.ConfigParser()
+        config.read_file(open(config_file))
+
+        # Read path of the HDF5 database
+
+        database_path = config['species']['database']
+
+        # Open the HDF5 database
+
+        h5_file = h5py.File(database_path, 'r')
+
+        # Read the posterior samples
+
+        dset = h5_file[f'results/fit/{tag}/samples']
+        samples = np.asarray(dset)
+
+        # Select random samples
+
+        if random is None:
+            # Required for the printed output in the for loop
+            random = samples.shape[0]
+
+        else:
+            random_indices = np.random.randint(samples.shape[0], size=random)
+            samples = samples[random_indices, :]
+
+        # Get number of model parameters
+
+        if 'n_param' in dset.attrs:
+            n_param = dset.attrs['n_param']
+        elif 'nparam' in dset.attrs:
+            n_param = dset.attrs['nparam']
+
+        # Get number of line and cloud species
+
+        n_line_species = dset.attrs['n_line_species']
+        n_cloud_species = dset.attrs['n_cloud_species']
+
+        # Convert numpy boolean to regular boolean
+
+        scattering = bool(dset.attrs['scattering'])
+
+        # Get chemistry attributes
+
+        chemistry = dset.attrs['chemistry']
+
+        if dset.attrs['quenching'] == 'None':
+            quenching = None
+        else:
+            quenching = dset.attrs['quenching']
+
+        # Get P-T profile attributes
+
+        pt_profile = dset.attrs['pt_profile']
+
+        if 'pressure_grid' in dset.attrs:
+            pressure_grid = dset.attrs['pressure_grid']
+        else:
+            pressure_grid = 'smaller'
+
+        # Get distance
+
+        if 'distance' in dset.attrs:
+            distance = dset.attrs['distance']
+        else:
+            distance = None
+
+        # Get model parameters
+
+        parameters = []
+        for i in range(n_param):
+            parameters.append(dset.attrs[f'parameter{i}'])
+
+        parameters = np.asarray(parameters)
+
+        # Get wavelength range for median cloud optical depth
+
+        if 'log_tau_cloud' in parameters and wavel_range is not None:
+            cloud_wavel = (dset.attrs['wavel_min'], dset.attrs['wavel_max'])
+        else:
+            cloud_wavel = None
+
+        # Get wavelength range for spectrum
+
+        if wavel_range is None:
+            wavel_range = (dset.attrs['wavel_min'], dset.attrs['wavel_max'])
+
+        # Create dictionary with array indices of the model parameters
+
+        indices = {}
+        for item in parameters:
+            indices[item] = np.argwhere(parameters == item)[0][0]
+
+        # Create list with line species
+
+        line_species = []
+        for i in range(n_line_species):
+            line_species.append(dset.attrs[f'line_species{i}'])
+
+        # Create list with cloud species
+
+        cloud_species = []
+        for i in range(n_cloud_species):
+            cloud_species.append(dset.attrs[f'cloud_species{i}'])
+
+        # Create an instance of ReadRadtrans
+        # Afterwards, the names of the cloud_species have been shortened
+        # from e.g. 'MgSiO3(c)_cd' to 'MgSiO3(c)'
+
+        read_rad = read_radtrans.ReadRadtrans(line_species=line_species,
+                                              cloud_species=cloud_species,
+                                              scattering=scattering,
+                                              wavel_range=wavel_range,
+                                              pressure_grid=pressure_grid,
+                                              cloud_wavel=cloud_wavel)
+
+        # Set quenching attribute such that the parameter of get_model is not required
+
+        read_rad.quenching = quenching
+
+        # pool = multiprocessing.Pool(os.cpu_count())
+        # processes = []
+
+        # Initiate empty list for ModelBox objects
+
+        boxes = []
+
+        for i, item in enumerate(samples):
+            print(f'\rGetting posterior spectra {i+1}/{random}...', end='')
+
+            # Get the P-T smoothing parameter
+            if 'pt_smooth' in dset.attrs:
+                pt_smooth = dset.attrs['pt_smooth']
+            else:
+                pt_smooth = item[indices['pt_smooth']]
+
+            # Calculate the petitRADTRANS spectrum
+
+            model_box = data_util.retrieval_spectrum(indices=indices,
+                                                     chemistry=chemistry,
+                                                     pt_profile=pt_profile,
+                                                     line_species=line_species,
+                                                     cloud_species=cloud_species,
+                                                     quenching=quenching,
+                                                     spec_res=spec_res,
+                                                     distance=distance,
+                                                     pt_smooth=pt_smooth,
+                                                     read_rad=read_rad,
+                                                     sample=item)
+
+            # Add the ModelBox to the list
+
+            boxes.append(model_box)
+
+            # proc = pool.apply_async(data_util.retrieval_spectrum,
+            #                         args=(indices,
+            #                               chemistry,
+            #                               pt_profile,
+            #                               line_species,
+            #                               cloud_species,
+            #                               quenching,
+            #                               spec_res,
+            #                               read_rad,
+            #                               item))
+            #
+            # processes.append(proc)
+
+        # pool.close()
+        #
+        # for i, item in enumerate(processes):
+        #     boxes.append(item.get(timeout=30))
+        #     print(f'\rGetting posterior spectra {i+1}/{random}...', end='', flush=True)
+
+        print(' [DONE]')
+
+        # Close the HDF5 database
+
+        h5_file.close()
+
+        return boxes, read_rad
+
+    @typechecked
+    def get_retrieval_teff(self,
+                           tag: str,
+                           random: int = 100) -> Tuple[float, float]:
+        """
+        Function for calculating Teff from randomly drawn samples of the posterior
+        distribution from :class:`~species.analysis.retrieval.AtmosphericRetrieval`.
+        This requires the recalculation of the spectra across a broad wavelength
+        range (0.5-50 um).
+
+        Parameters
+        ----------
+        tag : str
+            Database tag with the posterior samples.
+        random : int
+            Number of randomly selected samples.
+
+        Returns
+        -------
+        float
+            Mean of Teff samples.
+        float
+            Standard deviation of Teff samples.
+        """
+
+        print(f'Calculating Teff from {random} posterior samples... ')
+
+        boxes, _ = self.get_retrieval_spectra(tag=tag,
+                                              random=random,
+                                              wavel_range=(0.5, 50.),
+                                              spec_res=500.)
+
+        teff = np.zeros(len(boxes))
+
+        for i, box_item in enumerate(boxes):
+            sample_distance = box_item.parameters['distance']*constants.PARSEC
+            sample_radius = box_item.parameters['radius']*constants.R_JUP
+
+            # Scaling for the flux back to the planet surface
+            sample_scale = (sample_distance/sample_radius)**2
+
+            # Blackbody flux: sigma * Teff^4
+            flux_int = simps(sample_scale*box_item.flux, box_item.wavelength)
+            teff[i] = (flux_int/constants.SIGMA_SB)**0.25
+
+            # np.savetxt(f'output/spectrum/spectrum{i:04d}.dat',
+            #            np.column_stack([box_item.wavelength, sample_scale*box_item.flux]),
+            #            header='Wavelength (um) - Flux (W m-2 um-1)')
+
+        q_16, q_50, q_84 = np.percentile(teff, [16., 50., 84.])
+
+        print(f'Teff (K) = {q_50:.2f} -{q_50-q_16:.2f} +{q_84-q_50:.2f}')
+
+        with h5py.File(self.database, 'a') as h5_file:
+            print(f'Storing Teff as attribute of results/fit/{tag}/samples...', end='')
+            dset = h5_file[f'results/fit/{tag}/samples']
+            dset.attrs['teff'] = (q_50-q_16, q_50, q_84-q_50)
+            print(' [DONE]')
+
+        return np.mean(teff), np.std(teff)
+
+    @typechecked
+    def petitcode_param(self,
+                        tag: str,
+                        sample_type: str = 'median',
+                        json_file: Optional[str] = None) -> Dict[str, float]:
+        """
+        Function for converting the median are maximum likelihood posterior parameters of
+        ``petitRADTRANS`` into a dictionary of input parameters for ``petitCODE``.
+
+        Parameters
+        ----------
+        tag : str
+            Database tag with the posterior samples.
+        sample_type : str
+            Sample type that will be selected from the posterior ('median' or 'probable'). Either
+            the median or maximum likelihood parameters are used.
+        json_file : str, None
+            JSON file to store the posterior samples. The data will not be written if the argument
+            is set to ``None``.
+
+        Returns
+        -------
+        dict
+            Dictionary with parameters for ``petitCODE``.
+        """
+
+        if sample_type == 'median':
+            model_param = self.get_median_sample(tag)
+
+        elif sample_type == 'probable':
+            model_param = self.get_probable_sample(tag)
+
+        else:
+            raise ValueError('The argument of \'sample_type\' should be set to either '
+                             '\'median\' or \'probable\'.')
+
+        sample_box = self.get_samples(tag)
+
+        line_species = []
+        for i in range(sample_box.attributes['n_line_species']):
+            line_species.append(sample_box.attributes[f'line_species{i}'])
+
+        cloud_species = []
+        cloud_species_full = []
+
+        for i in range(sample_box.attributes['n_cloud_species']):
+            cloud_species.append(sample_box.attributes[f'cloud_species{i}'])
+            cloud_species_full.append(sample_box.attributes[f'cloud_species{i}'])
+
+        pcode_param = {}
+
+        pcode_param['logg'] = model_param['logg']
+        pcode_param['metallicity'] = model_param['metallicity']
+        pcode_param['c_o_ratio'] = model_param['c_o_ratio']
+
+        if 'fsed' in model_param:
+            pcode_param['fsed'] = model_param['fsed']
+
+        if 'log_kzz' in model_param:
+            pcode_param['log_kzz'] = model_param['log_kzz']
+
+        if 'fsed' in model_param:
+            pcode_param['fsed'] = model_param['fsed']
+
+        if 'sigma_lnorm' in model_param:
+            pcode_param['sigma_lnorm'] = model_param['sigma_lnorm']
+
+        if 'log_p_quench' in model_param:
+            pcode_param['log_p_quench'] = model_param['log_p_quench']
+            p_quench = 10.**model_param['log_p_quench']
+        else:
+            p_quench = None
+
+        pressure = np.logspace(-6., 3., 180)
+
+        if sample_box.attributes['pt_profile'] == 'molliere':
+            temperature, _, _ = retrieval_util.pt_ret_model(
+                np.array([model_param['t1'], model_param['t2'], model_param['t3']]),
+                10.**model_param['log_delta'], model_param['alpha'], model_param['tint'],
+                pressure, model_param['metallicity'], model_param['c_o_ratio'])
+
+        else:
+            knot_press = np.logspace(np.log10(pressure[0]), np.log10(pressure[-1]), 15)
+
+            knot_temp = []
+            for i in range(15):
+                knot_temp.append(model_param[f't{i}'])
+
+            knot_temp = np.asarray(knot_temp)
+
+            if 'pt_smooth' in model_param:
+                pt_smooth = model_param['pt_smooth']
+            else:
+                pt_smooth = 0.
+
+            temperature = retrieval_util.pt_spline_interp(
+                knot_press, knot_temp, pressure, pt_smooth=pt_smooth)
+
+        from poor_mans_nonequ_chem.poor_mans_nonequ_chem import interpol_abundances
+
+        # Interpolate the abundances, following chemical equilibrium
+        abund_in = interpol_abundances(np.full(pressure.shape, model_param['c_o_ratio']),
+                                       np.full(pressure.shape, model_param['metallicity']),
+                                       temperature,
+                                       pressure,
+                                       Pquench_carbon=p_quench)
+
+        # Extract the mean molecular weight
+        mmw = abund_in['MMW']
+
+        if 'log_tau_cloud' in model_param:
+            tau_cloud = 10.**model_param['log_tau_cloud']
+
+            cloud_fractions = {}
+
+            for i, item in enumerate(cloud_species):
+                if i == 0:
+                    cloud_fractions[item[:-3]] = 0.
+
+                else:
+                    cloud_1 = item[:-6].lower()
+                    cloud_2 = cloud_species[0][:-6].lower()
+
+                    cloud_fractions[item[:-3]] = model_param[f'{cloud_1}_{cloud_2}_ratio']
+
+        else:
+            tau_cloud = None
+
+        log_x_base = retrieval_util.log_x_cloud_base(model_param['c_o_ratio'],
+                                                     model_param['metallicity'],
+                                                     cloud_fractions)
+
+        p_base = {}
+
+        for item in cloud_species:
+            p_base_item = retrieval_util.find_cloud_deck(
+                item[:-6], pressure, temperature, model_param['metallicity'],
+                model_param['c_o_ratio'], mmw=np.mean(mmw), plotting=False)
+
+            abund_in[item[:-3]] = np.zeros_like(temperature)
+
+            abund_in[item[:-3]][pressure < p_base_item] = 10.**log_x_base[item[:-6]] * \
+                (pressure[pressure <= p_base_item] / p_base_item)**model_param['fsed']
+
+            p_base[item[:-3]] = p_base_item
+
+            indices = np.where(pressure <= p_base_item)[0]
+            pcode_param[f'{item}_base'] = pressure[np.amax(indices)]
+
+        # abundances = retrieval_util.create_abund_dict(
+        #     abund_in, line_species, sample_box.attributes['chemistry'],
+        #     pressure_grid='smaller', indices=None)
+
+        cloud_wavel = (sample_box.attributes['wavel_min'], sample_box.attributes['wavel_max'])
+
+        read_rad = read_radtrans.ReadRadtrans(line_species=line_species,
+                                              cloud_species=cloud_species,
+                                              scattering=True,
+                                              wavel_range=(0.5, 50.),
+                                              pressure_grid='smaller',
+                                              res_mode='c-k',
+                                              cloud_wavel=cloud_wavel)
+
+        print(f'Converting {tag} to petitCODE parameters...', end='', flush=True)
+
+        if sample_box.attributes['quenching'] == 'None':
+            quenching = None
+        else:
+            quenching = sample_box.attributes['quenching']
+
+        model_box = read_rad.get_model(model_param=model_param,
+                                       quenching=quenching,
+                                       spec_res=500.)
+
+        # Scale the flux back to the planet surface
+        distance = model_param['distance']*constants.PARSEC
+        radius = model_param['radius']*constants.R_JUP
+
+        # Blackbody flux: sigma * Teff^4
+        flux_int = simps(model_box.flux*(distance/radius)**2, model_box.wavelength)
+        pcode_param['teff'] = (flux_int/constants.SIGMA_SB)**0.25
+
+        cloud_scaling = read_rad.rt_object.cloud_scaling_factor
+
+        for item in cloud_species_full:
+            cloud_abund = abund_in[item[:-3]]
+            indices = np.where(cloud_abund > 0.)[0]
+            pcode_param[f'{item}_abund'] = cloud_scaling * cloud_abund[np.amax(indices)]
+
+        if json_file is not None:
+            with open(json_file, 'w') as out_file:
+                json.dump(pcode_param, out_file, indent=4)
+
+        print(' [DONE]')
+
+        return pcode_param

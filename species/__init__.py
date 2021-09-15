@@ -8,7 +8,7 @@ from species.analysis.fit_spectrum import FitSpectrum
 
 from species.analysis.photometry import SyntheticPhotometry
 
-# from species.analysis.retrieval import AtmosphericRetrieval
+from species.analysis.retrieval import AtmosphericRetrieval
 
 from species.read.read_calibration import ReadCalibration
 
@@ -20,7 +20,7 @@ from species.read.read_model import ReadModel
 
 from species.read.read_planck import ReadPlanck
 
-# from species.read.read_radtrans import ReadRadtrans
+from species.read.read_radtrans import ReadRadtrans
 
 from species.read.read_spectrum import ReadSpectrum
 
@@ -33,7 +33,7 @@ from species.core.box import create_box
 
 from species.core.constants import *
 
-from species.core.setup import SpeciesInit
+from species.core.init import SpeciesInit
 
 from species.data.companions import get_data
 
@@ -52,7 +52,9 @@ from species.plot.plot_mcmc import plot_posterior, \
                                    plot_size_distributions, \
                                    plot_extinction
 
-# from species.plot.plot_retrieval import plot_pt_profile
+from species.plot.plot_retrieval import plot_clouds, \
+                                        plot_opacities, \
+                                        plot_pt_profile
 
 from species.plot.plot_spectrum import plot_spectrum
 
@@ -73,7 +75,7 @@ from species.util.read_util import add_luminosity, \
 
 __author__ = 'Tomas Stolker'
 __license__ = 'MIT'
-__version__ = '0.3.6'
+__version__ = '0.4.0'
 __maintainer__ = 'Tomas Stolker'
 __email__ = 'stolker@strw.leidenuniv.nl'
 __status__ = 'Development'

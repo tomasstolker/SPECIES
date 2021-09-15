@@ -399,6 +399,13 @@ def plot_grid_statistic(tag: str,
 
     n_param = dset.attrs['n_param']
 
+    # flux_scaling = np.array(h5_file[f'results/comparison/{tag}/flux_scaling'])
+
+    # if 'extra_scaling' in h5_file[f'results/comparison/{tag}']:
+    #     extra_scaling = np.array(h5_file[f'results/comparison/{tag}/extra_scaling'])
+    # else:
+    #     extra_scaling = None
+
     read_obj = read_object.ReadObject(dset.attrs['object_name'])
 
     n_wavel = 0
@@ -483,9 +490,6 @@ def plot_grid_statistic(tag: str,
     if title is not None:
         ax.set_title(title, y=1.02, fontsize=14.)
 
-    # Sum the goodness-of-fit of the different spectra
-    goodness_fit = np.sum(goodness_fit, axis=-1)
-
     # Sum/collapse over log(g) if it contains a single value
     if len(coord_points[1]) == 1:
         goodness_fit = np.sum(goodness_fit, axis=1)
@@ -535,7 +539,13 @@ def plot_grid_statistic(tag: str,
         cb = mpl.colorbar.Colorbar(ax=ax_cb, mappable=c, orientation='vertical',
                                    ticklocation='right', format='%.1f')
 
-        cb.ax.tick_params(width=0.8, length=5, labelsize=12, direction='in', color='black')
+        cb.ax.minorticks_on()
+
+        cb.ax.tick_params(which='major', width=0.8, length=5, labelsize=12,
+                          direction='in', color='black')
+
+        cb.ax.tick_params(which='minor', width=0.8, length=3, labelsize=12,
+                          direction='in', color='black')
 
         cb.ax.set_ylabel(r'$\Delta\mathregular{log}\,\mathregular{G}$',
                          rotation=270, labelpad=22, fontsize=13.)
@@ -544,12 +554,23 @@ def plot_grid_statistic(tag: str,
             if upsample:
                 extra_interp = RegularGridInterpolator((coord_y, coord_x), extra_map)
                 extra_map = extra_interp((y_grid, x_grid))
-                cs = ax.contour(x_grid, y_grid, extra_map, levels=10, colors='white', linewidths=0.7)
+
+                cs = ax.contour(x_grid, y_grid, extra_map,
+                                levels=10, colors='white', linewidths=0.7)
 
             else:
-                cs = ax.contour(coord_x, coord_y, extra_map, levels=10, colors='white', linewidths=0.7)
+                cs = ax.contour(coord_x, coord_y, extra_map,
+                                levels=10, colors='white', linewidths=0.7)
 
             ax.clabel(cs, cs.levels, inline=True, fontsize=8, fmt='%1.1f')
+
+        # if extra_scaling is not None and len(coord_points[2]) > 1:
+        #     ratio = np.transpose(flux_scaling[:, 0, :])/np.transpose(extra_scaling[:, 0, :, 0])
+        #
+        #     cs = ax.contour(coord_x, coord_y, ratio, levels=10, colors='white',
+        #                     linestyles='-', linewidths=0.7)
+        #
+        #     ax.clabel(cs, cs.levels, inline=True, fontsize=8, fmt='%1.1f')
 
         ax.plot(coord_x[best_index[0]], coord_y[best_index[1]], marker='X',
                 ms=10., color='#eb4242', mfc='#eb4242', mec='black')

@@ -60,6 +60,14 @@ species.read.read\_planck module
    :undoc-members:
    :show-inheritance:
 
+species.read.read\_radtrans module
+----------------------------------
+
+.. automodule:: species.read.read_radtrans
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 species.read.read\_spectrum module
 ----------------------------------
 

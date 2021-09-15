@@ -3,7 +3,7 @@
 Installation
 ============
 
-*species* is compatible with Python 3.6/3.7/3.8 and is available in the `PyPI repository <https://pypi.org/project/species/>`_ and on `Github <https://github.com/tomasstolker/species>`_.
+*species* is compatible with Python 3.7/3.8/3.9 and is available in the `PyPI repository <https://pypi.org/project/species/>`_ and on `Github <https://github.com/tomasstolker/species>`_.
 
 Installation from PyPI
 ----------------------
@@ -23,11 +23,14 @@ Or, to update to the most recent version:
 Please check for any errors and warnings during the installation to make sure that all dependencies are correctly installed.
 
 .. important::
-   Before installing ``species``, it is required (for ``UltraNest``) to separately install ``cython``:
+   Before installing ``species``, it is required to separately install ``cython``:
 
    .. code-block:: console
 
        $ pip install cython
+
+.. important::
+   The ``PyMultiNest`` package requires the manual installation of ``MultiNest``. Please follow the `instructions <https://johannesbuchner.github.io/PyMultiNest/install.html>`_ for the building the library and make sure that the ``LD_LIBRARY_PATH`` (on Linux) or ``DYLD_LIBRARY_PATH`` (on macOS) environment variable is set. It is also possible to use ``species`` without installing ``MultiNest`` (but a warning will appear), apart from the functionalities that rely on ``PyMultiNest``.   
 
 Installation from Github
 ------------------------

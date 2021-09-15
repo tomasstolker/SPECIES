@@ -37,15 +37,9 @@ def check_dust_database() -> str:
 
     database_path = config['species']['database']
 
-    h5_file = h5py.File(database_path, 'r')
-
-    if 'dust' not in h5_file:
-        h5_file.close()
+    if 'dust' not in h5py.File(database_path, 'r'):
         species_db = database.Database()
         species_db.add_dust()
-        h5_file = h5py.File(database_path, 'r')
-
-    h5_file.close()
 
     return database_path
 
@@ -250,8 +244,12 @@ def calc_reddening(filters_color: Tuple[str, str],
     c_ext = {}
 
     for item in filters:
+        h5_file.close()
+
         read_filt = read_filter.ReadFilter(item)
         filter_wavel = read_filt.mean_wavelength()
+
+        h5_file = h5py.File(database_path, 'r')
 
         if composition == 'MgSiO3' and structure == 'crystalline':
             for i in range(3):

@@ -104,9 +104,9 @@ class ReadSpectrum:
         for item in h5_file[f'spectra/{self.spec_library}']:
             dset = h5_file[f'spectra/{self.spec_library}/{item}']
 
-            wavelength = dset[0, :]  # (um)
-            flux = dset[1, :]  # (W m-2 um-1)
-            error = dset[2, :]  # (W m-2 um-1)
+            wavelength = dset[:, 0]  # (um)
+            flux = dset[:, 1]  # (W m-2 um-1)
+            error = dset[:, 2]  # (W m-2 um-1)
 
             if exclude_nan:
                 indices = np.isnan(flux)
@@ -288,6 +288,7 @@ class ReadSpectrum:
         specbox = self.get_spectrum(sptypes=sptypes,
                                     exclude_nan=True)
 
+
         n_spectra = len(specbox.wavelength)
 
         filter_profile = read_filter.ReadFilter(filter_name=self.filter_name)
@@ -308,6 +309,7 @@ class ReadSpectrum:
                 abs_tmp = (np.nan, np.nan)
 
             else:
+
                 app_tmp, abs_tmp = synphot.spectrum_to_magnitude(
                     specbox.wavelength[i], specbox.flux[i], error=specbox.error[i],
                     distance=(float(specbox.distance[i][0]), float(specbox.distance[i][1])))

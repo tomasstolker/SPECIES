@@ -14,7 +14,7 @@ from scipy.ndimage.filters import gaussian_filter
 from typeguard import typechecked
 
 from species.core import box, constants
-from species.read import read_model, read_planck
+from species.read import read_model, read_planck, read_radtrans
 
 
 @typechecked
@@ -136,7 +136,9 @@ def update_spectra(objectbox: box.ObjectBox,
         and/or the error inflation.
     model : str, None
         Name of the atmospheric model. Only required for inflating the errors. Otherwise, the
-        argument can be set to ``None``.
+        argument can be set to ``None``. Not required when ``model='petitradtrans'`` because
+        the error inflation is differently implemented with
+        :class:`~species.analysis.retrieval.AtmosphericRetrieval`.
 
     Returns
     -------
@@ -185,6 +187,15 @@ def update_spectra(objectbox: box.ObjectBox,
                     warnings.warn(f'The dictionary with model parameters contains the error '
                                   f'inflation for {key} but the argument of \'model\' is set '
                                   f'to None. Inflation of the errors is therefore not possible.')
+
+                if model == 'petitradtrans':
+                    # Increase the errors by a constant value
+                    add_error = 10.**model_param[f'error_{key}']
+                    log_msg = f'Inflating the error of {key} (W m-2 um-1): {add_error:.2e}...'
+
+                    print(log_msg, end='', flush=True)
+                    spec_tmp[:, 2] += add_error
+                    print(' [DONE]')
 
                 else:
                     # Calculate the model spectrum

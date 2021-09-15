@@ -27,6 +27,7 @@ The following data and models are currently supported:
 - `DRIFT-PHOENIX <http://svo2.cab.inta-csic.es/theory/newov2/index.php?models=drift>`_
 - `Exo-REM <https://ui.adsabs.harvard.edu/abs/2018ApJ...854..172C/abstract>`_
 - `petitCODE <http://www.mpia.de/~molliere/#petitcode>`_
+- `petitRADTRANS <https://petitradtrans.readthedocs.io>`_
 - `T/Y dwarf spectra from Morley et al. (2012) <http://svo2.cab.inta-csic.es/svo/theory/newov2/index.php?models=morley12>`_
 
 **Spectral libraries**
@@ -66,9 +67,9 @@ After adding the relevant data to the database, the user can take advantage of t
 - Converting between fluxes and magnitudes (see :class:`~species.analysis.photometry.SyntheticPhotometry`).
 - Calculating synthetic photometry spectra (see :class:`~species.analysis.photometry.SyntheticPhotometry`).
 - Interpolating and plotting model spectra (see :class:`~species.read.read_model.ReadModel` and :func:`~species.plot.plot_spectrum.plot_spectrum`).
-- Grid retrievals with Bayesian inference (see :class:`~species.analysis.fit_model.FitModel` and :class:`~species.plot.plot_mcmc`).
+- Grid retrievals with Bayesian inference (see :class:`~species.analysis.fit_model.FitModel` and :mod:`~species.plot.plot_mcmc`).
 - Comparing a spectrum with a full grid of model spectra (see :meth:`~species.analysis.compare_spectra.CompareSpectra.compare_model`).
-- Free retrievals through a frontend for `petitRADTRANS <https://petitradtrans.readthedocs.io>`_  (see `AtmosphericRetrieval <https://github.com/tomasstolker/species/blob/retrieval/species/analysis/retrieval.py>`_ on the `retrieval branch <https://github.com/tomasstolker/species/tree/retrieval>`_).
+- Free retrievals with a frontend for `petitRADTRANS <https://petitradtrans.readthedocs.io>`_  (see :class:`~species.analysis.retrieval.AtmosphericRetrieval`).
 - Creating color-magnitude diagrams (see :class:`~species.read.read_color.ReadColorMagnitude` and :class:`~species.plot.plot_color.plot_color_magnitude`).
 - Creating color-color diagrams (see :class:`~species.read.read_color.ReadColorColor` and :class:`~species.plot.plot_color.plot_color_color`).
 - Computing synthetic fluxes from isochrones and model spectra (see :class:`~species.read.read_isochrone.ReadIsochrone`)

@@ -10,7 +10,7 @@ reqs = [str(req.requirement) for req in reqs]
 
 setup(
     name='species',
-    version='0.3.6',
+    version='0.4.0',
     description='Toolkit for atmospheric characterization of directly imaged exoplanets',
     long_description=open('README.rst').read(),
     long_description_content_type='text/x-rst',
@@ -37,8 +37,8 @@ setup(
         'Topic :: Scientific/Engineering :: Astronomy',
         'License :: OSI Approved :: MIT License',
         'Natural Language :: English',
-        'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
     ],
 )

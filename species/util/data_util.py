@@ -2,13 +2,17 @@
 Utility functions for data processing.
 """
 
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import h5py
 import numpy as np
 
 from scipy.interpolate import griddata
 from typeguard import typechecked
+
+from species.core import box
+from species.read import read_radtrans
+from species.util import retrieval_util
 
 
 @typechecked
@@ -692,3 +696,164 @@ def correlation_to_covariance(cor_matrix,
                 assert cor_matrix[i, j] == 1.
 
     return cov_matrix
+
+
+@typechecked
+def retrieval_spectrum(indices: Dict[str, np.int64],
+                       chemistry: str,
+                       pt_profile: str,
+                       line_species: List[str],
+                       cloud_species: List[str],
+                       quenching: Optional[str],
+                       spec_res: float,
+                       distance: Optional[float],
+                       pt_smooth: Optional[float],
+                       read_rad: read_radtrans.ReadRadtrans,
+                       sample: np.ndarray) -> box.ModelBox:
+    """
+    Function for calculating a petitRADTRANS spectrum from a posterior sample.
+
+    Parameters
+    ----------
+    indices : dict
+        Dictionary with the parameter indices for ``sample``.
+    chemistry : str
+        Chemistry type (``'equilibrium'`` or ``'free'``).
+    pt_profile : str
+        Pressure-temperature parametrization (``'molliere'``, ``'monotonic'``, or ``'free'``).
+    line_species : list(str)
+        List with the line species.
+    cloud_species : list(str)
+        List with the cloud species.
+    quenching : str, None
+        Quenching type for CO/CH4/H2O abundances. Either the quenching pressure (bar) is a free
+        parameter (``quenching='pressure'``) or the quenching pressure is calculated from the
+        mixing and chemical timescales (``quenching='diffusion'``). The quenching is not applied
+        if the argument is set to ``None``.
+    spec_res : float
+        Spectral resolution.
+    distance : float, None
+        Distance (pc).
+    pt_smooth : float
+        Standard deviation of the Gaussian kernel that is used for smoothing the sampled
+        temperature nodes of the P-T profile. Only required with `pt_profile='free'` or
+        `pt_profile='monotonic'`. The argument should be given as log10(P/bar).
+    read_rad : read_radtrans.ReadRadtrans
+        Instance of :class:`~species.read.read_radtrans.ReadRadtrans`.
+    sample : np.ndarray
+        Parameter values with their order given by the ``indices``.
+
+    Returns
+    -------
+    box.ModelBox
+        Box with the petitRADTRANS spectrum.
+    """
+
+    # Initiate parameter dictionary
+
+    model_param = {}
+
+    # Add log(g) and radius
+
+    model_param['logg'] = sample[indices['logg']]
+    model_param['radius'] = sample[indices['radius']]
+
+    # Add distance
+
+    if distance is not None:
+        model_param['distance'] = distance
+
+    # Add P-T profile parameters
+
+    if pt_profile == 'molliere':
+        model_param['t1'] = sample[indices['t1']]
+        model_param['t2'] = sample[indices['t2']]
+        model_param['t3'] = sample[indices['t3']]
+        model_param['log_delta'] = sample[indices['log_delta']]
+        model_param['alpha'] = sample[indices['alpha']]
+        model_param['tint'] = sample[indices['tint']]
+
+    elif pt_profile in ['free', 'monotonic']:
+        for j in range(15):
+            model_param[f't{j}'] = sample[indices[f't{j}']]
+
+    if pt_smooth is not None:
+        model_param['pt_smooth'] = pt_smooth
+
+    # Add chemistry parameters
+
+    if chemistry == 'equilibrium':
+        model_param['c_o_ratio'] = sample[indices['c_o_ratio']]
+        model_param['metallicity'] = sample[indices['metallicity']]
+
+    elif chemistry == 'free':
+        for species_item in line_species:
+            model_param[species_item] = sample[indices[species_item]]
+
+    if quenching == 'pressure':
+        model_param['log_p_quench'] = sample[indices['log_p_quench']]
+
+    # Add cloud parameters
+
+    if 'log_kappa_0' in indices:
+        model_param['log_kappa_0'] = sample[indices['log_kappa_0']]
+        model_param['opa_index'] = sample[indices['opa_index']]
+        model_param['log_p_base'] = sample[indices['log_p_base']]
+        model_param['albedo'] = sample[indices['albedo']]
+        model_param['fsed'] = sample[indices['fsed']]
+
+    elif len(cloud_species) > 0:
+        model_param['fsed'] = sample[indices['fsed']]
+        model_param['sigma_lnorm'] = sample[indices['sigma_lnorm']]
+
+        if 'kzz' in indices:
+            # Backward compatibility
+            model_param['kzz'] = sample[indices['kzz']]
+
+        elif 'log_kzz' in indices:
+            model_param['log_kzz'] = sample[indices['log_kzz']]
+
+        for cloud_item in cloud_species:
+            cloud_param = f'{cloud_item[:-3].lower()}_fraction'
+
+            if cloud_param in indices:
+                model_param[cloud_param] = sample[indices[cloud_param]]
+
+            cloud_param = f'{cloud_item[:-3].lower()}_tau'
+
+            if cloud_param in indices:
+                model_param[cloud_param] = sample[indices[cloud_param]]
+
+            if cloud_item in indices:
+                model_param[cloud_item] = sample[indices[cloud_item]]
+
+    if 'log_tau_cloud' in indices:
+        model_param['tau_cloud'] = 10.**sample[indices['log_tau_cloud']]
+
+        if len(cloud_species) > 1:
+            for cloud_item in cloud_species[1:]:
+                cloud_1 = cloud_item[:-3].lower()
+                cloud_2 = cloud_species[0][:-3].lower()
+
+                cloud_ratio = f'{cloud_1}_{cloud_2}_ratio'
+
+                model_param[cloud_ratio] = sample[indices[cloud_ratio]]
+
+    # Add extinction parameters
+
+    if 'ism_ext' in indices:
+        model_param['ism_ext'] = sample[indices['ism_ext']]
+
+    if 'ism_red' in indices:
+        model_param['ism_red'] = sample[indices['ism_red']]
+
+    # Calculate spectrum
+
+    model_box = read_rad.get_model(model_param,
+                                   spec_res=spec_res)
+
+    # Set content type of the ModelBox
+
+    model_box.type = 'mcmc'
+
+    return model_box

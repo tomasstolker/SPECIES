@@ -9,8 +9,8 @@
 .. image:: https://img.shields.io/pypi/pyversions/species
    :target: https://pypi.python.org/pypi/species
 
-.. image:: https://img.shields.io/travis/tomasstolker/species
-   :target: https://travis-ci.com/tomasstolker/species
+.. image:: https://github.com/tomasstolker/species/workflows/CI/badge.svg?branch=master
+   :target: https://github.com/tomasstolker/species/actions
 
 .. image:: https://img.shields.io/readthedocs/species
    :target: http://species.readthedocs.io

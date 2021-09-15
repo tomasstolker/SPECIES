@@ -23,7 +23,8 @@ except:
 try:
     import pymultinest
 except:
-    warnings.warn('PyMultiNest could not be imported.')
+    warnings.warn('PyMultiNest could not be imported. '
+                  'Perhaps because MultiNest was not build and/or found at the PYTHONPATH?')
 
 from scipy import linalg
 from typeguard import typechecked
@@ -1403,12 +1404,12 @@ class FitModel:
                 ln_like += mcmc_util.lnlike_phot(obj_item[0], phot_var, phot_flux, weight)
 
             else:
-                phot_var = obj_item[1, j]**2
-
-                if self.model == 'powerlaw' and f'{phot_filter}_error' in param_dict:
-                    phot_var += param_dict[f'{phot_filter}_error']**2 * obj_item[0, j]**2
-
                 for j in range(obj_item.shape[1]):
+                    phot_var = obj_item[1, j]**2
+
+                    if self.model == 'powerlaw' and f'{phot_filter}_error' in param_dict:
+                        phot_var += param_dict[f'{phot_filter}_error']**2 * obj_item[0, j]**2
+
                     ln_like += mcmc_util.lnlike_phot(obj_item[0, j], phot_var, phot_flux, weight)
 
         # Iterate over all spectra

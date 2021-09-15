@@ -68,6 +68,8 @@ def create_box(boxtype,
         box.flux = kwargs['flux']
         box.parameters = kwargs['parameters']
         box.quantity = kwargs['quantity']
+        if 'contribution' in kwargs:
+            box.contribution = kwargs['contribution']
 
     elif boxtype == 'object':
         box = ObjectBox()
@@ -111,6 +113,7 @@ def create_box(boxtype,
         box.ln_evidence = kwargs['ln_evidence']
         box.prob_sample = kwargs['prob_sample']
         box.median_sample = kwargs['median_sample']
+        box.attributes = kwargs['attributes']
 
     elif boxtype == 'spectrum':
         box = SpectrumBox()
@@ -254,6 +257,7 @@ class ModelBox(Box):
         self.flux = None
         self.parameters = None
         self.quantity = None
+        self.contribution = None
 
     def smooth_spectrum(self,
                         spec_res: float) -> None:
@@ -385,6 +389,7 @@ class SamplesBox(Box):
         self.ln_evidence = None
         self.prob_sample = None
         self.median_sample = None
+        self.attributes = None
 
 
 class SpectrumBox(Box):

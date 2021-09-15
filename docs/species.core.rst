@@ -20,10 +20,10 @@ species.core.constants module
    :undoc-members:
    :show-inheritance:
 
-species.core.setup module
--------------------------
+species.core.init module
+------------------------
 
-.. automodule:: species.core.setup
+.. automodule:: species.core.init
    :members:
    :undoc-members:
    :show-inheritance:

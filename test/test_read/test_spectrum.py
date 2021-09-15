@@ -27,7 +27,7 @@ class TestSpectrum:
     def test_read_spectrum(self):
         database = species.Database()
 
-        with pytest.warns(UserWarning) as warning:
+        with pytest.warns(UserWarning):
             database.add_spectrum('irtf', sptypes=['L', ])
 
         read_spectrum = species.ReadSpectrum('irtf', filter_name='MKO/NSFCam.H')

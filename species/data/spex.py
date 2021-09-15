@@ -56,8 +56,7 @@ def add_spex(input_path: str,
     if not os.path.exists(data_path):
         os.makedirs(data_path)
 
-    url_all = 'http://svo2.cab.inta-csic.es/vocats/v2/spex/' \
-              'cs.php?RA=180.000000&DEC=0.000000&SR=180.000000&VERB=2'
+    url_all = 'http://svo2.cab.inta-csic.es/vocats/v2/spex/cs.php?RA=180.000000&DEC=0.000000&SR=180.000000&VERB=2'
 
     xml_file_spex = os.path.join(data_path, 'spex.xml')
 
@@ -216,7 +215,7 @@ def add_spex(input_path: str,
                 if not isinstance(simbad_id, str):
                     simbad_id = simbad_id.decode('utf-8')
 
-                dist_select = distance_data.loc[distance_data['object'] == simbad_id]
+                dist_select = distance_data[distance_data['object'] == simbad_id]
 
                 if not dist_select.empty:
                     distance = (dist_select['distance'].values[0],

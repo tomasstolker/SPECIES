@@ -359,11 +359,13 @@ def plot_spectrum(boxes: list,
                         if item[:4] == 'teff':
                             value = f'{param[item]:.0f}'
 
-                        elif item in ['logg', 'feh', 'fsed', 'lognorm_ext',
-                                      'powerlaw_ext', 'ism_ext']:
+                        elif item in ['logg', 'feh', 'metallicity', 'fsed',
+                                      'lognorm_ext', 'powerlaw_ext', 'ism_ext']:
+
                             value = f'{param[item]:.1f}'
 
-                        elif item in ['co']:
+                        elif item in ['co', 'c_o_ratio']:
+
                             value = f'{param[item]:.2f}'
 
                         elif item[:6] == 'radius':
@@ -717,7 +719,7 @@ def plot_spectrum(boxes: list,
 
         ax3.axhline(0., ls='--', lw=0.7, color='gray', dashes=(2, 4), zorder=0.5)
 
-        if res_lim > 5.:
+        if res_lim > 5. or (ylim_res[0] < -5. and ylim_res[1] > 5.):
             ax3.axhline(-5., ls=':', lw=0.7, color='gray', dashes=(1, 4), zorder=0.5)
             ax3.axhline(5., ls=':', lw=0.7, color='gray', dashes=(1, 4), zorder=0.5)
 

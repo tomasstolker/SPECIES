@@ -18,7 +18,7 @@ from typeguard import typechecked
 
 from species.core import box
 from species.data import companions
-from species.read import read_object
+from species.read import read_filter, read_object
 from species.util import dust_util, plot_util
 
 
@@ -33,6 +33,8 @@ def plot_color_magnitude(boxes: list,
                          accretion: bool = False,
                          reddening: Optional[List[Tuple[Tuple[str, str], Tuple[str, float], str,
                                                         float, Tuple[float, float]]]] = None,
+                         ism_red: Optional[List[Tuple[Tuple[str, str], str, float,
+                                                      Tuple[float, float]]]] = None,
                          field_range: Optional[Tuple[str, str]] = None,
                          label_x: str = 'Color',
                          label_y: str = 'Absolute magnitude',
@@ -76,7 +78,7 @@ def plot_color_magnitude(boxes: list,
         imaged objects. The object names from ``objects`` will be compared with the data from
         :func:`~species.data.companions.get_data` to check if a companion is accreting or not.
     reddening : list(tuple(tuple(str, str), tuple(str, float), str, float,
-                tuple(float, float)), None
+                tuple(float, float))), None
         Include reddening arrows by providing a list with tuples. Each tuple contains the filter
         names for the color, the filter name and value of the magnitude, the mean particle radius
         (um), and the start position (color, mag) of the arrow in the plot, so ``((filter_color_1,
@@ -85,6 +87,12 @@ def plot_color_magnitude(boxes: list,
         log-normal size distribution is used with the specified mean radius and the geometric
         standard deviation is fixed to 2. Both ``xlim`` and ``ylim`` need to be set for the correct
         rotation of the reddening label. The parameter is not used if set to ``None``.
+    ism_red : list(tuple(tuple(str, str), str, float, tuple(float, float))), None
+        List with reddening arrows for ISM extinction. Each item in the list is a tuple that itself
+        contain a tuple with the filter names for the color, the filter name of the magnitude, the
+        visual extinction, and the start position (color, mag) of the arrow in the plot, so
+        ``((filter_color_1, filter_color_2), filter_mag, A_V, (x_pos, y_pos))``. The parameter is
+        not used if the argument is set to ``None``.
     field_range : tuple(str, str), None
         Range of the discrete colorbar for the field dwarfs. The tuple should contain the lower
         and upper value ('early M', 'late M', 'early L', 'late L', 'early T', 'late T', 'early Y).
@@ -389,6 +397,17 @@ def plot_color_magnitude(boxes: list,
                 ax1.plot(color, magnitude, marker='s', ms=4, linestyle='none', alpha=0.7,
                          color='gray', markeredgecolor='black', label='Young/low-gravity', zorder=2)
 
+                # for item in names[indices]:
+                #
+                #     if item == '2MASSWJ2244316+204343':
+                #         item = '2MASS 2244+20'
+                #
+                #     kwargs = {'ha': 'left', 'va': 'center', 'fontsize': 8.5,
+                #               'xytext': (5., 0.), 'color': 'black'}
+                #
+                #     ax1.annotate(item, (color, magnitude), zorder=3,
+                #                  textcoords='offset points', **kwargs)
+
     if isochrones:
         for item in isochrones:
             ax1.plot(item.color, item.magnitude, linestyle='-', linewidth=1., color='black')
@@ -433,6 +452,53 @@ def plot_color_magnitude(boxes: list,
             ax1.plot([item[4][0], x_pos], [item[4][1], y_pos], '-', color='white')
 
             sp1 = ax1.transData.transform_point((item[4][0], item[4][1]))
+            sp2 = ax1.transData.transform_point((x_pos, y_pos))
+
+            angle = np.degrees(np.arctan2(sp2[1]-sp1[1], sp2[0]-sp1[0]))
+            text.set_rotation(angle)
+
+    if ism_red is not None:
+        for item in ism_red:
+            # Color filters
+            read_filt_0 = read_filter.ReadFilter(item[0][0])
+            read_filt_1 = read_filter.ReadFilter(item[0][1])
+
+            # Magnitude filter
+            read_filt_2 = read_filter.ReadFilter(item[1])
+
+            mean_wavel = np.array([read_filt_0.mean_wavelength(),
+                                   read_filt_1.mean_wavelength(),
+                                   read_filt_2.mean_wavelength()])
+
+            ext_mag = dust_util.ism_extinction(item[2], 3.1, mean_wavel)
+
+            delta_x = ext_mag[0] - ext_mag[1]
+            delta_y = ext_mag[2]
+
+            x_pos = item[3][0] + delta_x
+            y_pos = item[3][1] + delta_y
+
+            ax1.annotate('', (x_pos, y_pos), xytext=(item[3][0], item[3][1]),
+                         fontsize=8, arrowprops={'arrowstyle': '->'}, color='black', zorder=3.)
+
+            x_pos_text = item[3][0] + delta_x/2.
+            y_pos_text = item[3][1] + delta_y/2.
+
+            vector_len = math.sqrt(delta_x**2+delta_y**2)
+
+            if (item[2]).is_integer():
+                red_label = fr'A$_\mathregular{{V}}$ = {item[2]:.0f}'
+            else:
+                red_label = fr'A$_\mathregular{{V}}$ = {item[2]:.1f}'
+
+            text = ax1.annotate(red_label, (x_pos_text, y_pos_text),
+                                xytext=(8.*delta_y/vector_len, 8.*delta_x/vector_len),
+                                textcoords='offset points', fontsize=8., color='black',
+                                ha='center', va='center')
+
+            ax1.plot([item[3][0], x_pos], [item[3][1], y_pos], '-', color='white')
+
+            sp1 = ax1.transData.transform_point((item[3][0], item[3][1]))
             sp2 = ax1.transData.transform_point((x_pos, y_pos))
 
             angle = np.degrees(np.arctan2(sp2[1]-sp1[1], sp2[0]-sp1[0]))

@@ -121,18 +121,28 @@ def sptype_stellar(sptype: np.ndarray,
 @typechecked
 def update_labels(param: List[str]) -> List[str]:
     """
-    Function for updating the fitted parameters to labels used in plots.
+    Function for formatting the model parameters to use them as labels in the posterior plot.
 
     Parameters
     ----------
     param : list
-        List with parameter names.
+        List with names of the model parameters.
 
     Returns
     -------
     list
         List with parameter labels for plots.
     """
+
+    cloud_species = ['fe', 'mgsio3', 'al2o3', 'na2s', 'kcl']
+
+    cloud_labels = ['Fe', r'MgSiO_{3}', r'Al_{2}O_{3}', r'Na_{2}S', 'KCl']
+
+    abund_species = ['CO_all_iso', 'H2O', 'CH4', 'NH3', 'CO2', 'H2S', 'Na', 'K', 'PH3', 'VO',
+                     'TiO', 'FeH', 'MgSiO3(c)', 'Fe(c)', 'Al2O3(c)']
+
+    abund_labels = ['CO', 'H_{2}O', 'CH_{4}', 'NH_{3}', 'CO_{2}', 'H_{2}S', 'Na', 'K',
+                    'PH_{3}', 'VO', 'TiO', 'FeH', 'MgSiO_{3}', 'Fe', 'Al_{2}O_{3}']
 
     if 'teff' in param:
         index = param.index('teff')
@@ -142,6 +152,10 @@ def update_labels(param: List[str]) -> List[str]:
         index = param.index('logg')
         param[index] = r'$\mathregular{log}\,\mathregular{g}$'
 
+    if 'metallicity' in param:
+        index = param.index('metallicity')
+        param[index] = r'[Fe/H]'
+
     if 'feh' in param:
         index = param.index('feh')
         param[index] = r'[Fe/H]'
@@ -150,8 +164,8 @@ def update_labels(param: List[str]) -> List[str]:
         index = param.index('fsed')
         param[index] = r'$\mathregular{f}_\mathregular{sed}$'
 
-    if 'co' in param:
-        index = param.index('co')
+    if 'c_o_ratio' in param:
+        index = param.index('c_o_ratio')
         param[index] = r'C/O'
 
     if 'radius' in param:
@@ -231,6 +245,10 @@ def update_labels(param: List[str]) -> List[str]:
         index = param.index('alpha')
         param[index] = r'$\alpha$'
 
+    if 'log_sigma_alpha' in param:
+        index = param.index('log_sigma_alpha')
+        param[index] = r'$\mathregular{{log}}\,\sigma_\alpha$'
+
     if 'log_delta' in param:
         index = param.index('log_delta')
         param[index] = r'$\mathregular{log}\,\mathregular{\delta}$'
@@ -238,6 +256,42 @@ def update_labels(param: List[str]) -> List[str]:
     if 'log_p_quench' in param:
         index = param.index('log_p_quench')
         param[index] = r'$\mathregular{log}\,\mathregular{P}_\mathregular{quench}$'
+
+    if 'sigma_lnorm' in param:
+        index = param.index('sigma_lnorm')
+        param[index] = r'$\sigma_\mathregular{g}$'
+
+    if 'log_kzz' in param:
+        index = param.index('log_kzz')
+        param[index] = r'$\mathregular{log}\,\mathregular{K}_\mathregular{zz}$'
+
+    if 'kzz' in param:
+        # Backward compatibility
+        index = param.index('kzz')
+        param[index] = r'$\mathregular{log}\,\mathregular{K}_\mathregular{zz}$'
+
+    for i, item in enumerate(cloud_species):
+        if f'{item}_fraction' in param:
+            index = param.index(f'{item}_fraction')
+            param[index] = rf'$\mathregular{{log}}\,\tilde{{\mathregular{{X}}}}' \
+                           rf'_\mathregular{{{cloud_labels[i]}}}$'
+
+        if f'{item}_tau' in param:
+            index = param.index(f'{item}_tau')
+            param[index] = rf'$\bar{{\tau}}_\mathregular{{{cloud_labels[i]}}}$'
+
+    for i, item_i in enumerate(cloud_species):
+        for j, item_j in enumerate(cloud_species):
+            if f'{item_i}_{item_j}_ratio' in param:
+                index = param.index(f'{item_i}_{item_j}_ratio')
+                param[index] = rf'$\mathregular{{log}}\,\tilde{{\mathregular{{X}}}}' \
+                               rf'_\mathregular{{{cloud_labels[i]}}}/' \
+                               rf'\mathregular{{\tilde{{X}}}}_\mathregular{{{cloud_labels[j]}}}$'
+
+    for i, item in enumerate(abund_species):
+        if item in param:
+            index = param.index(item)
+            param[index] = rf'$\mathregular{{log}}\,\mathregular{{{abund_labels[i]}}}$'
 
     for i, item in enumerate(param):
         if item[0:8] == 'scaling_':
@@ -260,6 +314,14 @@ def update_labels(param: List[str]) -> List[str]:
 
         elif item[0:13] == 'log_glob_amp_':
             param[i] = rf'$\mathregular{{log}}\,\sigma^2_\mathregular{{{item[13:]}}}$'
+
+    if 'c_h_ratio' in param:
+        index = param.index('c_h_ratio')
+        param[index] = r'[C/H]'
+
+    if 'o_h_ratio' in param:
+        index = param.index('o_h_ratio')
+        param[index] = r'[O/H]'
 
     for i in range(100):
         if f'teff_{i}' in param:
@@ -305,6 +367,18 @@ def update_labels(param: List[str]) -> List[str]:
     if 'log_powerlaw_c' in param:
         index = param.index('log_powerlaw_c')
         param[index] = r'c$_\mathregular{powerlaw}$'
+
+    if 'pt_smooth' in param:
+        index = param.index('pt_smooth')
+        param[index] = r'$\sigma_\mathregular{P-T}$'
+
+    if 'log_prob' in param:
+        index = param.index('log_prob')
+        param[index] = r'$\mathregular{log}\,L$'
+
+    if 'log_tau_cloud' in param:
+        index = param.index('log_tau_cloud')
+        param[index] = rf'$\mathregular{{log}}\,\tau_\mathregular{{cloud}}$'
 
     if 'veil_a' in param:
         index = param.index('veil_a')
@@ -361,6 +435,22 @@ def update_labels(param: List[str]) -> List[str]:
     if 'line_vrad' in param:
         index = param.index('line_vrad')
         param[index] = r'RV (km s$^{-1}$)'
+
+    if 'log_kappa_0' in param:
+        index = param.index('log_kappa_0')
+        param[index] = rf'$\mathregular{{log}}\,\kappa_0$'
+
+    if 'opa_index' in param:
+        index = param.index('opa_index')
+        param[index] = r'$\xi$'
+
+    if 'log_p_base' in param:
+        index = param.index('log_p_base')
+        param[index] = rf'$\mathregular{{log}}\,\mathregular{{P}}_\mathregular{{cloud}}$'
+
+    if 'albedo' in param:
+        index = param.index('albedo')
+        param[index] = r'$\omega$'
 
     return param
 
@@ -469,6 +559,11 @@ def quantity_unit(param: List[str],
         unit.append(None)
         label.append(r'$\mathregular{log}\,\mathregular{g}$')
 
+    if 'metallicity' in param:
+        quantity.append('metallicity')
+        unit.append(None)
+        label.append(r'[Fe/H]')
+
     if 'feh' in param:
         quantity.append('feh')
         unit.append(None)
@@ -479,8 +574,8 @@ def quantity_unit(param: List[str],
         unit.append(None)
         label.append(r'$\mathregular{f}_\mathregular{sed}$')
 
-    if 'co' in param:
-        quantity.append('co')
+    if 'c_o_ratio' in param:
+        quantity.append('c_o_ratio')
         unit.append(None)
         label.append('C/O')
 
@@ -548,6 +643,11 @@ def quantity_unit(param: List[str],
         quantity.append('powerlaw_ext')
         unit.append(None)
         label.append(r'$\mathregular{A}_\mathregular{V}$')
+
+    if 'pt_smooth' in param:
+        quantity.append('pt_smooth')
+        unit.append(None)
+        label.append(r'$\sigma_\mathregular{P-T}$')
 
     return quantity, unit, label
 

@@ -26,7 +26,7 @@ class TestCalibration:
 
     def test_read_calibration(self):
         database = species.Database()
-        database.add_spectrum('vega')
+        database.add_spectra('vega')
 
         read_calib = species.ReadCalibration('vega', filter_name='Paranal/NACO.H')
         assert read_calib.wavel_range == pytest.approx((1.44, 1.88), rel=1e-7, abs=0.)
@@ -49,7 +49,7 @@ class TestCalibration:
         read_calib = species.ReadCalibration('vega', filter_name='Paranal/NACO.H')
         flux = read_calib.get_flux(model_param=self.model_param)
 
-        assert flux[0]  == pytest.approx(1.132902304231636e-09, rel=self.limit, abs=0.)
+        assert flux[0] == pytest.approx(1.132902304231636e-09, rel=self.limit, abs=0.)
 
     def test_get_magnitude(self):
         read_calib = species.ReadCalibration('vega', filter_name='Paranal/NACO.H')

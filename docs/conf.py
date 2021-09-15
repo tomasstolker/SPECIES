@@ -48,6 +48,9 @@ extensions = [
 # Disable notebook timeout
 nbsphinx_timeout = -1
 
+# Allow errors from notebooks
+nbsphinx_allow_errors = True
+
 autoclass_content = 'both'
 
 # Add any paths that contain templates here, relative to this directory.
@@ -83,18 +86,34 @@ pygments_style = None
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'sphinx_rtd_theme'
+# html_theme = 'sphinx_rtd_theme'
+html_theme = 'sphinx_book_theme'
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
 # documentation.
 #
-html_theme_options = {'collapse_navigation': False,
-                      'display_version': False,
-                      'sticky_navigation': True,
-                      'prev_next_buttons_location': 'bottom',
-                      'navigation_depth': 5,
-                      'logo_only': True}
+# html_theme_options = {'collapse_navigation': False,
+#                       'display_version': False,
+#                       'sticky_navigation': True,
+#                       'prev_next_buttons_location': 'bottom',
+#                       'navigation_depth': 5,
+#                       'logo_only': True}
+
+html_theme_options = {
+    'path_to_docs': 'docs',
+    'repository_url': 'https://github.com/tomasstolker/species',
+    'repository_branch': 'main',
+    'launch_buttons': {
+        'binderhub_url': 'https://mybinder.org',
+        # 'colab_url': 'https://colab.research.google.com/',
+        'notebook_interface': 'jupyterlab',
+    },
+    'use_edit_page_button': True,
+    'use_issues_button': True,
+    'use_repository_button': True,
+    'use_download_button': True,
+}
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
