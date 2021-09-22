@@ -24,7 +24,9 @@ try:
     import pymultinest
 except:
     warnings.warn('PyMultiNest could not be imported. '
-                  'Perhaps because MultiNest was not build and/or found at the PYTHONPATH?')
+                  'Perhaps because MultiNest was not build '
+                  'and/or found at the LD_LIBRARY_PATH (Linux) '
+                  'or DYLD_LIBRARY_PATH (Mac)?')
 
 from scipy import linalg
 from typeguard import typechecked

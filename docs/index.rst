@@ -8,6 +8,7 @@ Documentation for *species*
 .. toctree::
    :maxdepth: 2
    :caption: Getting Started
+   :hidden:
 
    installation
    tutorials/running_species.ipynb
@@ -15,6 +16,7 @@ Documentation for *species*
 .. toctree::
    :maxdepth: 2
    :caption: User Documentation
+   :hidden:
 
    overview
    configuration
@@ -25,6 +27,7 @@ Documentation for *species*
 .. toctree::
    :maxdepth: 2
    :caption: About species
+   :hidden:
 
    contributing
    about

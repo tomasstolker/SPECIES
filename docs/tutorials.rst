@@ -3,7 +3,7 @@
 Tutorials
 =========
 
-This page contains a list of tutorials which highlight some of the functionalities of `species`. The tutorials can be executed on Binder in an `interactive environment <https://mybinder.org/v2/gh/tomasstolker/species/HEAD>`_ or they can be downloaded as `Jupyter notebook <https://github.com/tomasstolker/species/tree/master/docs/tutorials>`_. Please `create an issue <https://github.com/tomasstolker/species/issues>`_ if you encounter any problems with the tutorials.
+This page contains a list of tutorials which highlight some of the functionalities of `species`. The tutorials can be executed on Binder in an `interactive environment <https://mybinder.org/v2/gh/tomasstolker/species/HEAD>`_ or they can be downloaded as `Jupyter notebook <https://github.com/tomasstolker/species/tree/main/docs/tutorials>`_. Please `create an issue <https://github.com/tomasstolker/species/issues>`_ if you encounter any problems with the tutorials.
 
 .. tip::
    Details on the various classes, functions, and parameters can be found in the `API documentation <https://species.readthedocs.io/en/latest/modules.html>`_.

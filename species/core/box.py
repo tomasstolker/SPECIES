@@ -11,7 +11,7 @@ import species
 def create_box(boxtype,
                **kwargs):
     """
-    Function for creating a :class:`species.core.box.Box`.
+    Function for creating a :class:`~species.core.box.Box`.
 
     Returns
     -------
@@ -168,7 +168,7 @@ class Box:
 
 class ColorMagBox(Box):
     """
-    Class for storing color-magnitude data in a :class:`species.core.box.Box`.
+    Class for storing color-magnitude data in a :class:`~species.core.box.Box`.
     """
 
     def __init__(self):
@@ -193,7 +193,7 @@ class ColorMagBox(Box):
 
 class ColorColorBox(Box):
     """
-    Class for storing color-color data in a :class:`species.core.box.Box`.
+    Class for storing color-color data in a :class:`~species.core.box.Box`.
     """
 
     def __init__(self):
@@ -217,7 +217,7 @@ class ColorColorBox(Box):
 
 class IsochroneBox(Box):
     """
-    Class for storing isochrone data in a :class:`species.core.box.Box`.
+    Class for storing isochrone data in a :class:`~species.core.box.Box`.
     """
 
     def __init__(self):
@@ -240,7 +240,7 @@ class IsochroneBox(Box):
 
 class ModelBox(Box):
     """
-    Class for storing a model spectrum in a :class:`species.core.box.Box`.
+    Class for storing a model spectrum in a :class:`~species.core.box.Box`.
     """
 
     def __init__(self):
@@ -309,7 +309,7 @@ class ModelBox(Box):
 
 class ObjectBox(Box):
     """
-    Class for storing object data in a :class:`species.core.box.Box`.
+    Class for storing object data in a :class:`~species.core.box.Box`.
     """
 
     def __init__(self):
@@ -331,7 +331,7 @@ class ObjectBox(Box):
 
 class PhotometryBox(Box):
     """
-    Class for storing photometric data in a :class:`species.core.box.Box`.
+    Class for storing photometric data in a :class:`~species.core.box.Box`.
     """
 
     def __init__(self):
@@ -353,7 +353,7 @@ class PhotometryBox(Box):
 
 class ResidualsBox(Box):
     """
-    Class for storing best-fit residuals in a :class:`species.core.box.Box`.
+    Class for storing best-fit residuals in a :class:`~species.core.box.Box`.
     """
 
     def __init__(self):
@@ -371,7 +371,7 @@ class ResidualsBox(Box):
 
 class SamplesBox(Box):
     """
-    Class for storing posterior samples in a :class:`species.core.box.Box`.
+    Class for storing posterior samples in a :class:`~species.core.box.Box`.
     """
 
     def __init__(self):
@@ -394,7 +394,7 @@ class SamplesBox(Box):
 
 class SpectrumBox(Box):
     """
-    Class for storing spectral data in a :class:`species.core.box.Box`.
+    Class for storing spectral data in a :class:`~species.core.box.Box`.
     """
 
     def __init__(self):
@@ -417,7 +417,7 @@ class SpectrumBox(Box):
 
 class SynphotBox(Box):
     """
-    Class for storing synthetic photometry in a :class:`species.core.box.Box`.
+    Class for storing synthetic photometry in a :class:`~species.core.box.Box`.
     """
 
     def __init__(self):

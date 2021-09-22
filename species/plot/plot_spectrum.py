@@ -44,13 +44,13 @@ def plot_spectrum(boxes: list,
 
     Parameters
     ----------
-    boxes : list(species.core.box, )
+    boxes : list(species.core.box)
         Boxes with data.
-    filters : list(str, ), None
+    filters : list(str), None
         Filter IDs for which the transmission profile is plotted. Not plotted if set to None.
     residuals : species.core.box.ResidualsBox, None
         Box with residuals of a fit. Not plotted if set to None.
-    plot_kwargs : list(dict, ), None
+    plot_kwargs : list(dict), None
         List with dictionaries of keyword arguments for each box. For example, if the ``boxes``
         are a ``ModelBox`` and ``ObjectBox``:
 
@@ -398,12 +398,16 @@ def plot_spectrum(boxes: list,
                         #     newline = True
 
                         if par_unit[i] is None:
-                            label += f'{par_label[i]} = {value}'
-                        else:
-                            label += f'{par_label[i]} = {value} {par_unit[i]}'
+                            if len(label) > 0:
+                                label += ', '
 
-                        if i < len(par_key)-1:
-                            label += ', '
+                            label += f'{par_label[i]} = {value}'
+
+                        else:
+                            if len(label) > 0:
+                                label += ', '
+
+                            label += f'{par_label[i]} = {value} {par_unit[i]}'
 
                 else:
                     label = None

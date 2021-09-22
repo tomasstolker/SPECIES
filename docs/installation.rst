@@ -54,7 +54,7 @@ And running the setup script to install the package and its dependencies:
 
        $ pip install --upgrade pip
 
-Alternatively to running the ``setup.py`` file, the folder where ``species`` is located can also be added to the ``PYTHONPATH`` environment variable such that the package is found by Python. The command may depend on the OS that is used, but is often something like:
+Alternatively to running the ``setup.py`` file, the folder where ``species`` is located can also be added to the ``PYTHONPATH`` environment variable such that the package is found by Python. The command may depend on the OS that is used, but is typically something like:
 
 .. code-block:: console
 
@@ -64,7 +64,7 @@ New commits can be pulled from Github once a local copy of the repository exists
 
 .. code-block:: console
 
-    $ git pull origin master
+    $ git pull origin main
 
 Do you want to make changes to the code? Please fork the `species` repository on the Github page and clone your own fork instead of the main repository. Contributions and pull requests are very welcome (see :ref:`contributing` section).
 

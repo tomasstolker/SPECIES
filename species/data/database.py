@@ -2361,6 +2361,12 @@ class Database:
 
         samples = np.loadtxt(os.path.join(output_folder, 'post_equal_weights.dat'))
 
+        if samples.ndim == 1:
+            warnings.warn(f'Only 1 sample found in post_equal_weights.dat '
+                          f'of the \'{output_folder}\' folder.')
+
+            samples = samples[np.newaxis, ]
+
         with h5py.File(self.database, 'a') as h5_file:
 
             if 'results' not in h5_file:

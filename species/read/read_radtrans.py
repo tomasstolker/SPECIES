@@ -247,7 +247,7 @@ class ReadRadtrans:
         # Create the P-T profile
 
         if 'tint' in model_param:
-            temp, _, _ = retrieval_util.pt_ret_model(
+            temp, _, conv_press = retrieval_util.pt_ret_model(
                 np.array([model_param['t1'], model_param['t2'], model_param['t3']]),
                 10.**model_param['log_delta'], model_param['alpha'], model_param['tint'],
                 self.pressure, metallicity, c_o_ratio)

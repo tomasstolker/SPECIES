@@ -28,19 +28,22 @@ The following data and models are currently supported:
 - `Exo-REM <https://ui.adsabs.harvard.edu/abs/2018ApJ...854..172C/abstract>`_
 - `petitCODE <http://www.mpia.de/~molliere/#petitcode>`_
 - `petitRADTRANS <https://petitradtrans.readthedocs.io>`_
-- `T/Y dwarf spectra from Morley et al. (2012) <http://svo2.cab.inta-csic.es/svo/theory/newov2/index.php?models=morley12>`_
+- `T/Y dwarf spectra from Morley et al. (2012) <https://ui.adsabs.harvard.edu/abs/2012ApJ...756..172M/abstract>`_
 
 **Spectral libraries**
 
 - `IRTF Spectral Library <http://irtfweb.ifa.hawaii.edu/~spex/IRTF_Spectral_Library/>`_
 - `SpeX Prism Spectral Libraries <http://pono.ucsd.edu/~adam/browndwarfs/spexprism/index_old.html>`_
 - `SDSS spectra by Kesseli et al. (2017) <https://ui.adsabs.harvard.edu/abs/2017ApJS..230...16K/abstract>`_
+- NIR spectra of young M/L dwarfs by `Allers & Liu (2013) <https://ui.adsabs.harvard.edu/abs/2013ApJ...772...79A/abstract>`_
+- NIR spectra of young M/L dwarfs by `Bonnefoy et al. (2014) <https://ui.adsabs.harvard.edu/abs/2014A%26A...562A.127B/abstract>`_
+- `Spectra of directly imaged planets and brown dwarfs <https://species.readthedocs.io/en/latest/species.data.html#species.data.companions.get_spec_data>`_
 
 **Photometric libraries**
 
 - `Database of Ultracool Parallaxes <http://www.as.utexas.edu/~tdupuy/plx/Database_of_Ultracool_Parallaxes.html>`_
 - Photometry from `S. Leggett <http://www.gemini.edu/staff/sleggett>`_
-- Directly imaged planets and brown dwarfs (see dictionary of :class:`~species.data.companions`)
+- `Magnitudes of directly imaged planets and brown dwarfs <https://species.readthedocs.io/en/latest/species.data.html#species.data.companions.get_data>`_
 
 **Evolutionary tracks**
 

@@ -9,7 +9,7 @@
 .. image:: https://img.shields.io/pypi/pyversions/species
    :target: https://pypi.python.org/pypi/species
 
-.. image:: https://github.com/tomasstolker/species/workflows/CI/badge.svg?branch=master
+.. image:: https://github.com/tomasstolker/species/workflows/CI/badge.svg?branch=main
    :target: https://github.com/tomasstolker/species/actions
 
 .. image:: https://img.shields.io/readthedocs/species
@@ -22,7 +22,7 @@
    :target: https://www.codefactor.io/repository/github/tomasstolker/species
 
 .. image:: https://img.shields.io/github/license/tomasstolker/species
-   :target: https://github.com/tomasstolker/species/blob/master/LICENSE
+   :target: https://github.com/tomasstolker/species/blob/main/LICENSE
 
 .. image:: https://mybinder.org/badge_logo.svg
    :target: https://mybinder.org/v2/gh/tomasstolker/species/HEAD
